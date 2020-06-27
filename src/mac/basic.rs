@@ -5,7 +5,7 @@ use log::{debug, info, warn};
 use ieee802154::mac::{Frame};
 use radio::{Transmit, Receive, State, Rssi, ReceiveInfo, IsBusy};
 
-use crate::{timer::Timer, mac::Mac};
+use crate::{timer::Timer, mac::Mac, packet::Packet};
 
 /// Basic CSMA/CA MAC
 /// Generic over a Radio (R), Timer (T) and Buffers (B)
@@ -20,8 +20,7 @@ pub struct BasicMac<R, T, B> {
     radio: R,
     timer: T,
 
-    rx_buffer: B,
-    tx_buffer: B,
+    buffer: B,
 }
 
 /// Configuration for the basic MAC
@@ -62,6 +61,12 @@ pub enum BasicMacState {
 #[derive(Debug, Clone, PartialEq)]
 pub enum BasicMacError<E> {
 
+    /// Transmission buffer full
+    TransmitPending,
+
+    /// Transmission failed
+    TransmitFailed(Packet),
+
     /// Wrapper for unhandled / underlying radio errors
     Radio(E),
 }
@@ -80,7 +85,7 @@ where
     T: Timer,
 {
     /// Create a new MAC using the provided radio
-    pub fn new(radio: R, timer: T, rx_buffer: B, tx_buffer: B, config: BasicMacConfig) -> Self {
+    pub fn new(radio: R, timer: T, buffer: B, config: BasicMacConfig) -> Self {
         Self{
             config,
 
@@ -88,8 +93,7 @@ where
             ack_required: false,
             last_tick: timer.ticks_ms(),
 
-            rx_buffer,
-            tx_buffer,
+            buffer,
 
             timer,
             radio, 
@@ -137,13 +141,14 @@ where
 {
     type Error = BasicMacError<E>;
 
-    fn transmit(&mut self) -> Result<(), Self::Error> {
+    fn transmit(&mut self, packet: Packet) -> Result<(), Self::Error> {
         // Put a packet in the TX buffer
+
 
         unimplemented!();
     }
 
-    fn receive(&mut self) -> Result<(), Self::Error> {
+    fn receive(&mut self) -> Result<Option<Packet>, Self::Error> {
         // Pop a packet from the RX buffer
         unimplemented!();
     }
@@ -172,7 +177,7 @@ where
 
                 // Fetch received packets
                 let mut info = I::default();
-                self.radio.get_received(&mut info, self.rx_buffer.as_mut())?;
+                let n = self.radio.get_received(&mut info, self.buffer.as_mut())?;
 
                 // Restart receive mode
             },
@@ -213,7 +218,7 @@ mod test {
         let mut radio = MockRadio::new(&[
             Transaction::start_receive(None),
         ]);
-        let mut mac = BasicMac::new(radio.clone(), MockTimer(0), vec![0u8; 128], vec![0u8; 128], BasicMacConfig::default());
+        let mut mac = BasicMac::new(radio.clone(), MockTimer(0), vec![0u8; 128], BasicMacConfig::default());
 
         mac.tick().unwrap();
 
@@ -225,7 +230,7 @@ mod test {
         let data = [0, 1, 2, 3, 4, 5];
 
         let mut radio = MockRadio::new(&[]);
-        let mut mac = BasicMac::new(radio.clone(), MockTimer(0), vec![0u8; 128], vec![0u8; 128], BasicMacConfig::default());
+        let mut mac = BasicMac::new(radio.clone(), MockTimer(0), vec![0u8; 128], BasicMacConfig::default());
 
         // Setup try_transmit expectations
         radio.expect(&[

@@ -13,6 +13,7 @@ default = []
 radio = "0.7.0"
 ieee802154 = "0.3.0"
 log = "0.4.8"
+heapless = "0.5.5"
 
 [dev-dependencies]
 radio = { version = "0.7.0", features = ["mock"] }

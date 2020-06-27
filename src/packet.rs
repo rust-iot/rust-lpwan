@@ -1,18 +1,31 @@
 
 use ieee802154::mac::*;
 
+use heapless::{Vec, consts::U128};
+
 pub const MAX_PAYLOAD_LEN: usize = 128;
 
-/// Packet object represents an IEEE 802.15.4 object with owned storage
+/// Packet object represents an IEEE 802.15.4 object with owned storage.
+/// 
+/// Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html
+#[derive(Clone, Debug)]
 pub struct Packet {
     pub header: Header,
 
     pub content: FrameContent,
 
-    payload: [u8; MAX_PAYLOAD_LEN],
-    payload_len: usize,
+    payload: Vec<u8, U128>,
 
     pub footer: [u8; 2],
+}
+
+impl PartialEq for Packet {
+    fn eq(&self, o: &Self) -> bool {
+        self.header == o.header &&
+        self.content == o.content && 
+        self.payload() == o.payload() &&
+        self.footer == o.footer
+    }
 }
 
 impl Packet {
@@ -27,9 +40,9 @@ impl Packet {
         len += self.content.encode(&mut buf[len..]);
 
         // Write payload
-        buf[len .. len+self.payload_len].copy_from_slice(&self.payload);
+        buf[len .. len+self.payload.len()].copy_from_slice(&self.payload);
 
-        len += self.payload_len;
+        len += self.payload.len();
 
         // Write footer
         match write_footer {
@@ -67,29 +80,22 @@ impl Packet {
         remaining -= used;
 
         // Copy out the payload
-        let mut payload = [0u8; MAX_PAYLOAD_LEN];
-        (&mut payload[..remaining]).copy_from_slice(&body[used..]);
+        let payload = Vec::from_slice(&body[used..]).map_err(|_e| DecodeError::NotEnoughBytes)?;
 
         Ok(Packet {
             header,
             content,
             payload,
-            payload_len: remaining,
             footer,
         })
     }
 
-    pub fn get_payload(&self) -> &[u8] {
-        &self.payload[..self.payload_len]
+    pub fn payload(&self) -> &[u8] {
+        &self.payload
     }
 
     pub fn set_payload(&mut self, body: &[u8]) -> Result<(), ()> {
-        if body.len() > MAX_PAYLOAD_LEN {
-            return Err(())
-        }
-
-        (&mut self.payload[..body.len()]).copy_from_slice(body);
-        self.payload_len = body.len();
+        self.payload = Vec::from_slice(body)?;
 
         Ok(())
     }
