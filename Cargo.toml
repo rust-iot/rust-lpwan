@@ -1,0 +1,23 @@
+[package]
+name = "lpwan"
+repository = "https://github.com/ryankurte/rust-lpwan"
+version = "0.1.0"
+authors = ["ryan <ryan@kurte.nz>"]
+edition = "2018"
+
+[features]
+mocks = []
+default = []
+
+[dependencies]
+radio = "0.7.0"
+ieee802154 = "0.3.0"
+log = "0.4.8"
+
+[dev-dependencies]
+radio = { version = "0.7.0", features = ["mock"] }
+
+[patch.crates-io]
+radio = { path = "../rust-radio" }
+#ieee802154 = { path = "../rust-ieee802.15.4" }
+
