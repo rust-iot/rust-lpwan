@@ -16,7 +16,7 @@ pub trait Mac {
     fn receive(&mut self) -> Result<Option<Packet>, Self::Error>;
 
     // Update the MAC state
-    fn tick(&mut self) -> Result<(), Self::Error>;
+    fn tick(&mut self) -> Result<Option<Packet>, Self::Error>;
 }
 
 

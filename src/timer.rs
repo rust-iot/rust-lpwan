@@ -14,15 +14,30 @@ pub trait Timer {
 
 #[cfg(any(test, feature="mocks"))]
 pub mod mock {
-    pub struct MockTimer (pub u64);
+    use std::sync::{Arc, Mutex};
+
+    #[derive(Clone, Debug)]
+    pub struct MockTimer (Arc<Mutex<u64>>);
+
+    impl MockTimer {
+        pub fn new() -> Self {
+            Self(Arc::new(Mutex::new(0)))
+        }
+
+        pub fn set_ms(&mut self, val: u32) {
+            *self.0.lock().unwrap() = val as u64 * 1000;
+        }
+    }
 
     impl super::Timer for MockTimer {
         fn ticks_ms(&self) -> u32 {
-            return (self.0 / 1000) as u32
+            let v = self.0.lock().unwrap();
+            return (*v / 1000) as u32
         }
 
         fn time_us(&self) -> u32 {
-            return self.0 as u32
+            let v = self.0.lock().unwrap();
+            return *v as u32
         }
     }
 }

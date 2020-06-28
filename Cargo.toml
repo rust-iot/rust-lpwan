@@ -17,6 +17,7 @@ heapless = "0.5.5"
 
 [dev-dependencies]
 radio = { version = "0.7.0", features = ["mock"] }
+simplelog = "0.8.0"
 
 [patch.crates-io]
 radio = { path = "../rust-radio" }

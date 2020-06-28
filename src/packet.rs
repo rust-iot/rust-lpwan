@@ -29,6 +29,57 @@ impl PartialEq for Packet {
 }
 
 impl Packet {
+
+    pub fn data<D: AsRef<[u8]>>(dest: Address, source: Address, seq: u8, data: D) -> Packet {
+        let d = data.as_ref();
+
+        Packet {
+            header: Header {
+                frame_type: FrameType::Data,
+                frame_pending: false,
+                security: Security::None,
+                ack_request: false,
+                pan_id_compress: false,
+                version: FrameVersion::Ieee802154_2006,
+                destination: dest,
+                source: source,
+                seq: seq,
+            },
+            content: FrameContent::Data,
+            payload: Vec::from_slice(d).unwrap(),
+            footer: [0u8; 2],
+        }
+    }
+
+    // Generate an ACK for the provided packet
+    pub fn ack(request: &Packet) -> Packet {
+        Packet {
+            header: Header {
+                frame_type: FrameType::Acknowledgement,
+                frame_pending: false,
+                security: Security::None,
+                ack_request: false,
+                pan_id_compress: false,
+                version: FrameVersion::Ieee802154_2006,
+                destination: request.header.source,
+                source: request.header.destination,
+                seq: request.header.seq,
+            },
+            content: FrameContent::Acknowledgement,
+            payload: Vec::new(),
+            footer: [0u8; 2],
+        }
+    }
+
+    // Check whether a received packet is an ack for this packet
+    pub fn is_ack(&self, maybe_ack: &Packet) -> bool {
+        maybe_ack.header.frame_type == FrameType::Acknowledgement &&
+        maybe_ack.header.source == self.header.destination &&
+        maybe_ack.header.destination == self.header.source && 
+        maybe_ack.header.seq == self.header.seq && 
+        maybe_ack.content == FrameContent::Acknowledgement
+    }
+
     // Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html#method.encode
     pub fn encode(&self, buf: &mut [u8], write_footer: WriteFooter) -> usize {
         let mut len = 0;
@@ -73,7 +124,7 @@ impl Packet {
         }
 
         // Fetch the body subslice
-        let body = &buf[header_len..remaining];
+        let body = &buf[header_len..header_len+remaining];
 
         // Decode the FrameContent
         let (content, used) = FrameContent::decode(body, &header)?;
