@@ -71,13 +71,13 @@ impl Packet {
         }
     }
 
-    // Check whether a received packet is an ack for this packet
-    pub fn is_ack(&self, maybe_ack: &Packet) -> bool {
-        maybe_ack.header.frame_type == FrameType::Acknowledgement &&
-        maybe_ack.header.source == self.header.destination &&
-        maybe_ack.header.destination == self.header.source && 
-        maybe_ack.header.seq == self.header.seq && 
-        maybe_ack.content == FrameContent::Acknowledgement
+    // Check whether this packet is an ack for the provided packet
+    pub fn is_ack_for(&self, original: &Packet) -> bool {
+        self.header.frame_type == FrameType::Acknowledgement &&
+        self.header.source == original.header.destination &&
+        self.header.destination == original.header.source && 
+        self.header.seq == original.header.seq && 
+        self.content == FrameContent::Acknowledgement
     }
 
     // Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html#method.encode

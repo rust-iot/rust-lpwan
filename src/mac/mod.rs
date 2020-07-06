@@ -1,9 +1,17 @@
 //! Medium Access Control (MAC) layer module.
 //! Contains MAC traits and implementations.
 
+pub mod config;
+
+pub mod error;
+
 pub mod basic;
 
+pub mod core;
+
+
 use crate::{packet::Packet};
+
 
 /// Generic MAC trait, implemented by all MACs
 pub trait Mac {
