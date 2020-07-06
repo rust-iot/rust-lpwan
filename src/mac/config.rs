@@ -52,6 +52,17 @@ impl AddressConfig {
             extended_address: Some(ExtendedAddress(extended_address)),
         }
     }
+
+    pub fn get(&self) -> Address {
+        if let Some(s) = self.short_address {
+            return Address::Short(self.pan_id, s)
+        }
+        if let Some(e) = self.extended_address {
+            return Address::Extended(self.pan_id, e)
+        }
+        
+        Address::None
+    }
 }
 
 /// Configuration for beaconing mode

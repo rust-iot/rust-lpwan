@@ -2,15 +2,22 @@
 //! Contains MAC traits and implementations.
 
 pub mod config;
+pub use config::*;
 
 pub mod error;
+pub use error::*;
 
-pub mod basic;
+pub mod csma;
+use csma::CsmaMode;
 
 pub mod core;
 
-
 use crate::{packet::Packet};
+
+pub use ieee802154::mac::*;
+
+/// Type alias for CSMA based MAC
+pub type CsmaMac<R, T, B> = core::Core<R, T, B, CsmaMode>;
 
 
 /// Generic MAC trait, implemented by all MACs

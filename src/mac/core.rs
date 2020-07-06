@@ -1,17 +1,15 @@
 
 use core::fmt::Debug;
-use core::marker::PhantomData;
 
-use log::{debug, info, warn, error};
+use log::{trace, debug, warn, error};
 
 use ieee802154::mac::*;
 
-use super::basic::*;
 use super::config::*;
 use super::error::*;
 
-use radio::{Transmit, Receive, State, Rssi, ReceiveInfo, IsBusy};
-use crate::{timer::Timer, mac::Mac, packet::Packet};
+use radio::{Transmit, Receive, State, Busy, Rssi, ReceiveInfo};
+use crate::{timer::Timer, packet::Packet};
 
 /// Core MAC states
 #[derive(Debug, Clone, PartialEq)]
@@ -26,11 +24,12 @@ pub enum CoreState {
 
 /// Basic CSMA/CA MAC
 /// Generic over a Radio (R), Timer (T), Buffers (B) and Mode (M)
-pub struct Core<R: Debug, T: Debug, B: Debug, M: Debug> {
+pub struct Core<R, T, B, M> {
     pub(crate) address: AddressConfig,
     pub(crate) config: CoreConfig,
 
     pub(crate) state: CoreState,
+    pub(crate) seq: u8,
     
     pub(crate) ack_required: bool,
     pub(crate) retries: u16,
@@ -51,10 +50,10 @@ pub struct Core<R: Debug, T: Debug, B: Debug, M: Debug> {
 
 impl <R, I, E, T, B> Core<R, T, B, ()> 
 where
-    R: State<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E> + Debug,
+    R: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
     I: ReceiveInfo + Default + Debug,
-    B: AsRef<[u8]> + AsMut<[u8]> + Debug,
-    T: Timer + Debug,
+    B: AsRef<[u8]> + AsMut<[u8]>,
+    T: Timer,
 {
     /// Create a new MAC using the provided radio
     pub fn new(radio: R, timer: T, buffer: B, address: AddressConfig, core_config: CoreConfig) -> Self {
@@ -63,6 +62,7 @@ where
             config: core_config,
 
             state: CoreState::Idle,
+            seq: 0,
             
             ack_required: false,
             retries: 0,
@@ -83,10 +83,10 @@ where
 
 impl <R, I, E, T, B, M> Core<R, T, B, M> 
 where
-    R: State<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E> + Debug,
+    R: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
     I: ReceiveInfo + Default + Debug,
-    B: AsRef<[u8]> + AsMut<[u8]> + Debug,
-    T: Timer + Debug,
+    B: AsRef<[u8]> + AsMut<[u8]>,
+    T: Timer,
     M: Debug,
 {
     pub fn set_transmit(&mut self, packet: Packet) -> Result<(), CoreError<E>> {
@@ -111,11 +111,10 @@ where
 
     /// Enter receive mode
     pub fn receive_start(&mut self) -> Result<(), CoreError<E>> {
-        debug!("Start receive");
+        trace!("Start receive");
 
         // Check the radio is not currently busy
-        let radio_state = self.radio.get_state().map_err(CoreError::Radio)?;
-        if radio_state.is_busy() {
+        if self.radio.is_busy().map_err(CoreError::Radio)? {
             //TODO: what do?
         }
 
@@ -132,7 +131,7 @@ where
 
     /// Poll radio for a received packet
     pub fn try_receive(&mut self) -> Result<Option<Packet>, CoreError<E>> {
-        debug!("Try receive");
+        trace!("Try receive");
 
         let buff = self.buffer.as_mut();
         let now = self.timer.ticks_ms();
@@ -142,7 +141,7 @@ where
             return Ok(None)
         }
 
-        debug!("MAC received packet at tick {} ms", now);
+        trace!("MAC received packet at tick {} ms", now);
 
         // Fetch received packets
         let mut info = I::default();
@@ -205,7 +204,7 @@ where
             },
             // On receipt of another packet
             false => {
-                debug!("Received packet mismatch (expecting ack)");
+                warn!("Received packet mismatch (expecting ack)");
                 // TODO: store non_ack packets if we can?
 
                 Ok(false)
@@ -215,9 +214,8 @@ where
 
     pub fn channel_clear(&mut self) -> Result<bool, CoreError<E>> {
         // Check the radio is not currently busy
-        let radio_state = self.radio.get_state().map_err(CoreError::Radio)?;
-        if radio_state.is_busy() {
-            debug!("Radio busy");
+        if self.radio.is_busy().map_err(CoreError::Radio)? {
+            warn!("Radio busy");
             return Ok(false)
         }
 
@@ -242,7 +240,7 @@ where
 
     /// Attempt transmission (using CSMA guards)
     pub fn transmit_csma<'p>(&mut self, packet: &Packet) -> Result<bool, CoreError<E>> {
-        debug!("Try transmit");
+        trace!("Try transmit");
 
         
         // Check channel is clear
@@ -258,7 +256,7 @@ where
 
     /// Transmit a packet immediately (bypassing CSMA)
     pub fn transmit_now(&mut self, packet: &Packet) -> Result<(), CoreError<E>> {
-        debug!("Do transmit");
+        trace!("Do transmit");
 
         let buff = self.buffer.as_mut();
 
@@ -290,7 +288,7 @@ where
             return Ok(false)
         }
 
-        debug!("Transmit complete");
+        trace!("Transmit complete");
 
         // Re-enter receive mode
         self.radio.start_receive().map_err(CoreError::Radio)?;
@@ -339,18 +337,27 @@ where
         
         true
     }
+
+    pub fn transmit_data(&mut self, dest: Address, data: &[u8]) -> Result<(), CoreError<E>> {
+        let p = Packet::data(dest, self.address.get(), self.seq, data);
+        self.seq += 1;
+        self.set_transmit(p)
+    }
 }
 
 
 
 #[cfg(test)]
 mod test {
+    use std::vec;
+
+    use ieee802154::mac::*;
+
     use radio::mock::*;
     
     use crate::timer::mock::MockTimer;
     use super::*;
 
-    use std::vec;
 
     #[test]
     fn core_init_mac() {

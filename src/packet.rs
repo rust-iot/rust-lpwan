@@ -1,9 +1,12 @@
 
+use log::error;
+
 use ieee802154::mac::*;
 
-use heapless::{Vec, consts::U128};
+use heapless::{Vec, consts::U256};
 
-pub const MAX_PAYLOAD_LEN: usize = 128;
+// TODO: fix or remove this?
+pub const MAX_PAYLOAD_LEN: usize = 256;
 
 /// Packet object represents an IEEE 802.15.4 object with owned storage.
 /// 
@@ -14,7 +17,7 @@ pub struct Packet {
 
     pub content: FrameContent,
 
-    payload: Vec<u8, U128>,
+    payload: Vec<u8, U256>,
 
     pub footer: [u8; 2],
 }
@@ -33,6 +36,12 @@ impl Packet {
     pub fn data<D: AsRef<[u8]>>(dest: Address, source: Address, seq: u8, data: D) -> Packet {
         let d = data.as_ref();
 
+        let mut payload = Vec::new();
+
+        if let Err(e) = payload.extend_from_slice(d) {
+            panic!("Error encoding payload: {:?}", e);
+        };
+        
         Packet {
             header: Header {
                 frame_type: FrameType::Data,
@@ -46,7 +55,7 @@ impl Packet {
                 seq: seq,
             },
             content: FrameContent::Data,
-            payload: Vec::from_slice(d).unwrap(),
+            payload,
             footer: [0u8; 2],
         }
     }

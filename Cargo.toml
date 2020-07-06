@@ -6,6 +6,7 @@ authors = ["ryan <ryan@kurte.nz>"]
 edition = "2018"
 
 [features]
+std = [ "rand-facade/os_rng" ]
 mocks = []
 default = []
 
@@ -14,8 +15,12 @@ radio = "0.7.0"
 ieee802154 = "0.3.0"
 log = "0.4.8"
 heapless = "0.5.5"
-rand-facade = "0.1.2"
 rand_core = "0.5.1"
+
+[dependencies.rand-facade]
+version = "0.2.0"
+features = [ "cortex_m" ]
+default-features = false
 
 [dev-dependencies]
 radio = { version = "0.7.0", features = ["mock"] }

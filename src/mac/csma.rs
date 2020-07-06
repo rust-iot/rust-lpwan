@@ -1,10 +1,9 @@
 
 use core::fmt::Debug;
 
-use log::{debug, info, warn, error};
+use log::{debug, trace, warn, error};
 
-use ieee802154::mac::*;
-use radio::{Transmit, Receive, State, Rssi, ReceiveInfo, IsBusy};
+use radio::{Transmit, Receive, State, Busy, Rssi, ReceiveInfo};
 
 use rand_core::RngCore;
 use rand_facade::GlobalRng;
@@ -69,10 +68,10 @@ impl CsmaConfig {
 
 impl <R, I, E, T, B> Core<R, T, B, CsmaMode> 
 where
-    R: State<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E> + Debug,
-    I: ReceiveInfo + Default + Debug,
+    R: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
+    I: ReceiveInfo + Default,
     B: AsRef<[u8]> + AsMut<[u8]> + Debug,
-    T: Timer + Debug,
+    T: Timer,
 {
     /// Create a new MAC using the provided radio
     pub fn new_csma(radio: R, timer: T, buffer: B, address: AddressConfig, csma_config: CsmaConfig, core_config: CoreConfig) -> Self {
@@ -81,6 +80,7 @@ where
             config: core_config,
 
             state: CoreState::Idle,
+            seq: 0,
             
             ack_required: false,
             retries: 0,
@@ -105,10 +105,10 @@ where
 
 impl <R, I, E, T, B> Mac for Core<R, T, B, CsmaMode> 
 where
-    R: State<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E> + Debug,
+    R: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
     I: ReceiveInfo + Default + Debug,
-    B: AsRef<[u8]> + AsMut<[u8]> + Debug,
-    T: Timer + Debug,
+    B: AsRef<[u8]> + AsMut<[u8]>,
+    T: Timer,
 {
     type Error = CoreError<E>;
 
@@ -123,7 +123,7 @@ where
     fn tick(&mut self) -> Result<Option<Packet>, Self::Error> {
         let now_ms = self.timer.ticks_ms();
 
-        debug!("Tick at tick {} state: {:?}", now_ms, self.state);
+        trace!("Tick at tick {} state: {:?}", now_ms, self.state);
 
         match self.state {
             CoreState::Idle => {
@@ -146,7 +146,7 @@ where
                         debug!("Backoff expired at {} ms, starting tx", now_ms);
 
                         self.transmit_now(&tx)?;
-                        
+
                         self.tx_buffer = Some(tx);
                         return Ok(None)
                     }
@@ -239,13 +239,15 @@ where
 
 #[cfg(test)]
 mod test {
+    use std::vec;
+    use ieee802154::mac::*;
+
     use radio::BasicInfo;
     use radio::mock::*;
     
     use crate::timer::mock::MockTimer;
     use super::*;
 
-    use std::vec;
 
     #[test]
     fn transmit_with_ack() {

@@ -8,8 +8,7 @@ pub trait Timer {
     /// Returns the number of millisecond ticks since some unknown epoc
     fn ticks_ms(&self) -> u32;
 
-    /// Returns the microsecond ticks since some unknown epoc
-    fn time_us(&self) -> u32;
+
 }
 
 #[cfg(any(test, feature="mocks"))]
@@ -44,6 +43,7 @@ pub mod mock {
             return (*v / 1000) as u32
         }
 
+        #[cfg(nope)]
         fn time_us(&self) -> u32 {
             let v = self.0.lock().unwrap();
             return *v as u32
