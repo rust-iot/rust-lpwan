@@ -1,7 +1,7 @@
 
 use core::fmt::Debug;
 
-use log::{debug, trace, warn, error};
+use log::{debug, trace, info, warn, error};
 
 use radio::{Transmit, Receive, State, Busy, Rssi, ReceiveInfo};
 
@@ -188,7 +188,22 @@ where
                 }
             },
             CoreState::Transmitting => {
-                self.transmit_done()?;
+                let done = self.transmit_done()?;
+                if done {
+                    // Reset CSMA state
+                    self.mode.state = CsmaState::Idle;
+
+                    let tx = self.tx_buffer.take().unwrap();
+
+                    if !tx.header.ack_request {
+                        debug!("Send complete");
+                        return Ok(Some(tx));
+                    } else {
+                        debug!("Retrying TX");
+                        self.tx_buffer = Some(tx);
+                        self.retries -= 1;
+                    }
+                }
             },
             CoreState::AwaitingAck => {
                  // Receive packets if available
