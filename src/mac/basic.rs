@@ -6,6 +6,9 @@ use log::{debug, info, warn, error};
 use ieee802154::mac::*;
 use radio::{Transmit, Receive, State, Rssi, ReceiveInfo, IsBusy};
 
+use rand_core::RngCore;
+use rand_facade::GlobalRng;
+
 use crate::{timer::Timer, mac::Mac, packet::Packet};
 
 use super::config::*;
@@ -22,18 +25,45 @@ pub struct CsmaMode {
 #[derive(Debug, PartialEq)]
 pub enum CsmaState {
     Idle,
+    Pending(u32, u32),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct CsmaConfig {
+    /// Minimum number of backoffs prior to transmission
+    pub min_backoff_count: u32,
 
+    /// Maximum number of backoffs prior to transmission
+    pub max_backof_count: u32,
+
+    /// Backoff period in MS
+    pub backoff_period_ms: u32,
+
+    /// Maximum number of retries for un-acknow_msledged messages
+    pub max_backoff_retries: u32,
 }
 
 impl Default for CsmaConfig {
     fn default() -> Self {
-        Self{
-
+        Self {
+            min_backoff_count: 1,
+            max_backof_count: 5,
+            backoff_period_ms: 10,
+            max_backoff_retries: 2,
         }
+    }
+}
+
+impl CsmaConfig {
+    /// Generate a new random backoff time
+    pub fn backoff_ms(&self) -> u32 {
+        let mut backoff_slots = GlobalRng::get().next_u32() % self.max_backof_count;
+
+        backoff_slots = backoff_slots.max(self.min_backoff_count);
+
+        let backoff_time = backoff_slots * self.backoff_period_ms;
+
+        backoff_time
     }
 }
 
@@ -91,9 +121,9 @@ where
     }
 
     fn tick(&mut self) -> Result<Option<Packet>, Self::Error> {
-        let now = self.timer.ticks_ms();
+        let now_ms = self.timer.ticks_ms();
 
-        debug!("Tick at tick {} state: {:?}", now, self.state);
+        debug!("Tick at tick {} state: {:?}", now_ms, self.state);
 
         match self.state {
             CoreState::Idle => {
@@ -104,23 +134,57 @@ where
                 // Try to receive and unpack packet
                 if let Some(packet) = self.try_receive()? {
                     self.handle_received(packet)?;
+                    return Ok(None);
                 }
 
-                // If we're still in receive mode (not sending an ACK)
-                // and we have a packet ready to send, start the backoff
-                // TODO: make this random
-                
+                // If we're currently awaiting a TX, update CSMA state
+                if let CsmaState::Pending(r, t) = self.mode.state {
+                    let tx = self.tx_buffer.take().unwrap();
 
-                // Send packet if pending
-                if let Some(tx) = self.tx_buffer.take() {
-                    debug!("Attempting transmission");
+                    // If the backoff window is complete, transmit
+                    if now_ms >= t {
+                        debug!("Backoff expired at {} ms, starting tx", now_ms);
 
-                    // TODO: setup ack /retry info
+                        self.transmit_now(&tx)?;
+                        
+                        self.tx_buffer = Some(tx);
+                        return Ok(None)
+                    }
 
-                    let res = self.transmit_csma(&tx);
-                    
+                    // If the channel is busy, reset backoff window
+                    if !self.channel_clear()? {
+                        if r == 0 {
+                            error!("Transmit timeout at {} ms, no remaining slots", now_ms);
+                            self.mode.state = CsmaState::Idle;
+
+                            return Err(CoreError::TransmitFailed(tx))
+                        } else {
+                            debug!("Backoff error at {} ms, retrying", now_ms);
+                            let backoff_time = now_ms + self.mode.config.backoff_ms();
+                            self.mode.state = CsmaState::Pending(r - 1, backoff_time);
+                        }
+                    }
+
+                    // Otherwise, keep on
+                    debug!("CSMA backoff ok at {} ms", now_ms);
+
                     self.tx_buffer = Some(tx);
-                    let _ = res?;
+                    return Ok(None)
+                }
+
+                // Arm TX
+                if self.mode.state == CsmaState::Idle && self.tx_buffer.is_some() {
+                    // Update retry count
+                    self.retries = self.config.max_retries;
+
+                    // Configure backoff
+                    let backoff_rounds = self.mode.config.max_backoff_retries;
+                    let backoff_time = now_ms + self.mode.config.backoff_ms();
+
+                    self.mode.state = CsmaState::Pending(backoff_rounds, backoff_time);
+
+                    debug!("Starting CSMA TX backoff at {} with expiry {}", now_ms, backoff_time);
+
                 }
             },
             CoreState::Transmitting => {
@@ -140,10 +204,10 @@ where
                 }
 
                 // Timeout ACKs
-                if now > (self.last_tick + self.config.ack_timeout_ms) {
+                if now_ms > (self.last_tick + self.config.ack_timeout_ms) {
                     let tx = self.tx_buffer.take().unwrap();
 
-                    debug!("ACK timeout for packet {} at tick {}", tx.header.seq, now);
+                    debug!("ACK timeout for packet {} at tick {}", tx.header.seq, now_ms);
                 
                     if self.retries > 0 {
                         // Update retries and re-attempt transmission
@@ -208,13 +272,15 @@ mod test {
             Transaction::get_state(Ok(MockState::Idle)),
             Transaction::start_receive(None),
             Transaction::check_receive(true, Ok(false)),
+            Transaction::check_receive(true, Ok(false)),
             Transaction::get_state(Ok(MockState::Receive)),
             Transaction::poll_rssi(Ok(-90i16)),
+            Transaction::check_receive(true, Ok(false)),
             Transaction::start_transmit((&buff[..n]).to_vec(), None),
         ]);
 
         // Queue packet for transmission
-        timer.set_ms(1);
+        timer.inc();
         mac.transmit(packet.clone()).unwrap();
 
         assert_eq!(mac.tx_buffer, Some(packet.clone()));
@@ -222,16 +288,35 @@ mod test {
         info!("Starting TX");
 
         // Tick MAC to start RX
-        timer.set_ms(2);
+        timer.inc();
         mac.tick().unwrap();
 
-        // Tick MAC to start TX
-        timer.set_ms(3);
+        // Tick MAC to start TX backoff
+        timer.inc();
         mac.tick().unwrap();
+
+        assert_ne!(mac.mode.state, CsmaState::Idle);
+
+        info!("CSMA started");
+
+        // Override backoff time to next tick
+        if let CsmaState::Pending(_r, t) = &mut mac.mode.state {
+            *t = timer.val() + 2;
+            info!("Overriding expiry to: {}", *t);
+        }
+
+        // Tick to poll rssi
+        timer.inc();
+        mac.tick().unwrap();
+
+        // Tick to expire timer and start tx
+        timer.inc();
+        mac.tick().unwrap();
+
 
         // Check expectations and state
         assert_eq!(mac.state, CoreState::Transmitting);
-        assert_eq!(mac.last_tick, 3);
+        assert_eq!(mac.last_tick, timer.val());
 
         radio.done();
 
@@ -247,21 +332,21 @@ mod test {
         info!("Continuing TX");
 
         // Tick in transmitting state (still transmitting)
-        timer.set_ms(4);
+        timer.inc();
         mac.tick().unwrap();
 
         assert_eq!(mac.state, CoreState::Transmitting);
-        assert_eq!(mac.last_tick, 3);
+        assert_eq!(mac.last_tick, timer.val() - 1);
 
         info!("Completing TX");
 
         // Tick in transmitting state (transmission done)
-        timer.set_ms(5);
+        timer.inc();
         mac.tick().unwrap();
 
         // Check we're ready for an ACK
         assert_eq!(mac.state, CoreState::AwaitingAck);
-        assert_eq!(mac.last_tick, 5);
+        assert_eq!(mac.last_tick, timer.val());
         assert_eq!(mac.ack_required, true);
         assert_eq!(mac.retries, mac.config.max_retries);
         assert_eq!(mac.tx_buffer, Some(packet.clone()));

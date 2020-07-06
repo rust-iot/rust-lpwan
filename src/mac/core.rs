@@ -213,10 +213,7 @@ where
         }
     }
 
-    /// Attempt transmission (using CSMA guards)
-    pub fn transmit_csma<'p>(&mut self, packet: &Packet) -> Result<bool, CoreError<E>> {
-        debug!("Try transmit");
-
+    pub fn channel_clear(&mut self) -> Result<bool, CoreError<E>> {
         // Check the radio is not currently busy
         let radio_state = self.radio.get_state().map_err(CoreError::Radio)?;
         if radio_state.is_busy() {
@@ -240,7 +237,18 @@ where
             return Ok(false)
         }
 
-        // TODO: reset backoff
+        Ok(true)
+    }
+
+    /// Attempt transmission (using CSMA guards)
+    pub fn transmit_csma<'p>(&mut self, packet: &Packet) -> Result<bool, CoreError<E>> {
+        debug!("Try transmit");
+
+        
+        // Check channel is clear
+        if !self.channel_clear()? {
+            return Ok(false);
+        }
 
         // Do packet transmission
         self.transmit_now(packet)?;
@@ -265,10 +273,8 @@ where
 
         if packet.header.ack_request {
             self.ack_required = true;
-            self.retries = self.config.max_retries;
         } else {
             self.ack_required = false;
-            self.retries = 0;
         }
         
         self.last_tick = self.timer.ticks_ms();

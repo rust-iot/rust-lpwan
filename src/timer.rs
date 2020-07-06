@@ -27,6 +27,15 @@ pub mod mock {
         pub fn set_ms(&mut self, val: u32) {
             *self.0.lock().unwrap() = val as u64 * 1000;
         }
+
+        pub fn inc(&mut self) {
+            let mut v  = self.0.lock().unwrap();
+            *v += 1000;
+        }
+
+        pub fn val(&self) -> u32 {
+            (*self.0.lock().unwrap() / 1000) as u32
+        }
     }
 
     impl super::Timer for MockTimer {
