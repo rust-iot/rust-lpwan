@@ -1,5 +1,5 @@
 
-use log::error;
+use log::{error};
 
 use ieee802154::mac::*;
 
@@ -33,14 +33,14 @@ impl PartialEq for Packet {
 
 impl Packet {
 
-    pub fn data<D: AsRef<[u8]>>(dest: Address, source: Address, seq: u8, data: D) -> Packet {
-        let d = data.as_ref();
-
+    pub fn data(dest: Address, source: Address, seq: u8, data: &[u8]) -> Packet {
         let mut payload = Vec::new();
 
-        if let Err(e) = payload.extend_from_slice(d) {
+        if let Err(e) = payload.extend_from_slice(data) {
             panic!("Error encoding payload: {:?}", e);
         };
+
+        error!("Payload: {:?}", payload);
         
         Packet {
             header: Header {

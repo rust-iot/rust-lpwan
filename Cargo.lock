@@ -80,12 +80,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "embedded-hal"
+version = "1.0.0-alpha.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8a5f661e931005fe7709649150bb2774b68d8faf28b9969cb73442be34518f56"
+dependencies = [
+ "nb",
+]
+
+[[package]]
 name = "embedded-hal-mock"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9eca2fb304dbaea79776ea2a0b1445e0de00b103854dbd956f406edcbf54a262"
 dependencies = [
- "embedded-hal",
+ "embedded-hal 0.2.4",
  "nb",
 ]
 
@@ -252,7 +261,7 @@ name = "radio"
 version = "0.7.0"
 dependencies = [
  "chrono",
- "embedded-hal",
+ "embedded-hal 1.0.0-alpha.1",
  "embedded-hal-mock",
  "log",
  "nb",
