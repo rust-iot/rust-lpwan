@@ -147,6 +147,8 @@ where
         let mut info = I::default();
         let n = self.radio.get_received(&mut info, buff).map_err(CoreError::Radio)?;
 
+        debug!("Received ({} bytes): {:?}", n, &buff[..n]);
+
         // Decode packet
         let packet = Packet::decode(&buff[..n], self.config.rx_has_footer)
             .map_err(CoreError::DecodeError)?;
@@ -263,6 +265,8 @@ where
         // Encode message
         let n = packet.encode(buff, WriteFooter::No);
 
+        debug!("Transmitting ({} bytes): {:?}", n, &buff[..n]);
+
         // Start the transmission
         self.radio.start_transmit(&buff[..n]).map_err(CoreError::Radio)?;
 
@@ -282,10 +286,19 @@ where
 
     /// Poll for transmit completion
     pub fn transmit_done(&mut self) -> Result<bool, CoreError<E>> {
+        let now = self.timer.ticks_ms();
+        
+        // TODO: Check for TX timeout
+        #[cfg(nope)]
+        if (self.last_tick + self.config.tx_timeout_ms) > now {
+            error!("TX timeout at {} ms", now);
+            self.state = CoreState::Idle;
+            return Err(CoreError::Timeout)
+        }
+        
         // Check for transmission complete
-        // TODO: tx timeouts here
         if !self.radio.check_transmit().map_err(CoreError::Radio)? {
-            return Ok(false)
+            return Ok(false);
         }
 
         trace!("Transmit complete");
@@ -298,7 +311,7 @@ where
             true => CoreState::AwaitingAck,
             false => CoreState::Listening,
         };
-        self.last_tick = self.timer.ticks_ms(); 
+        self.last_tick = now; 
 
         debug!("Transmit complete, starting receive (new state: {:?})\r\n", self.state);
 

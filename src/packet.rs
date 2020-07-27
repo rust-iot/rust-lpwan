@@ -39,8 +39,6 @@ impl Packet {
         if let Err(e) = payload.extend_from_slice(data) {
             panic!("Error encoding payload: {:?}", e);
         };
-
-        error!("Payload: {:?}", payload);
         
         Packet {
             header: Header {

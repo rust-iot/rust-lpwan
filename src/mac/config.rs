@@ -11,6 +11,9 @@ pub struct CoreConfig {
     /// Timeout for message ACK (if required) in milliseconds
     pub ack_timeout_ms: u32,
 
+    /// Timeout for TX success in milliseconds
+    pub tx_timeout_ms: u32,
+
     /// Number of retries for acknowleged messages
     pub max_retries: u16,
 
@@ -26,6 +29,8 @@ impl Default for CoreConfig {
         Self {           
             channel_clear_threshold: -90,
             ack_timeout_ms: 10,
+            tx_timeout_ms: 20,
+
             max_retries: 5,
 
             rx_has_footer: false,

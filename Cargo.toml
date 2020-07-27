@@ -19,7 +19,6 @@ rand_core = "0.5.1"
 
 [dependencies.rand-facade]
 version = "0.2.0"
-features = [ "cortex_m" ]
 default-features = false
 
 [dev-dependencies]

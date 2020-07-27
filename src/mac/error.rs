@@ -19,5 +19,7 @@ pub enum CoreError<E> {
 
     /// Wrapper for unhandled / underlying radio errors
     Radio(E),
+
+    Timeout,
 }
 

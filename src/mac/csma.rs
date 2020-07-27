@@ -132,9 +132,16 @@ where
             },
             CoreState::Listening | CoreState::Receiving => {
                 // Try to receive and unpack packet
-                if let Some(packet) = self.try_receive()? {
-                    self.handle_received(packet)?;
-                    return Ok(None);
+                match self.try_receive() {
+                    Ok(Some(packet)) => {
+                        self.handle_received(packet)?;
+                        return Ok(None);
+                    },
+                    Ok(None) => (),
+                    Err(e) => {
+                        self.receive_start()?;
+                        return Err(e);
+                    }
                 }
 
                 // If we're currently awaiting a TX, update CSMA state
@@ -193,10 +200,16 @@ where
                     // Reset CSMA state
                     self.mode.state = CsmaState::Idle;
 
-                    let tx = self.tx_buffer.take().unwrap();
+                    let tx = match self.tx_buffer.take() {
+                        Some(p) => p,
+                        None => {
+                            error!("No packet in tx buffer?!");
+                            return Ok(None);
+                        }
+                    };
 
                     if !tx.header.ack_request {
-                        debug!("Send complete");
+                        debug!("TX complete");
                         return Ok(Some(tx));
                     } else {
                         debug!("Retrying TX");
@@ -222,7 +235,7 @@ where
                 if now_ms > (self.last_tick + self.config.ack_timeout_ms) {
                     let tx = self.tx_buffer.take().unwrap();
 
-                    debug!("ACK timeout for packet {} at tick {}", tx.header.seq, now_ms);
+                    info!("ACK timeout for packet {} at tick {}", tx.header.seq, now_ms);
                 
                     if self.retries > 0 {
                         // Update retries and re-attempt transmission
