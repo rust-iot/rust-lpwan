@@ -401,7 +401,7 @@ mod test {
         // Setup transmit_csma expectations
         radio.expect(&[
             // Check we're not currently busy
-            Transaction::get_state(Ok(MockState::Idle)),
+            Transaction::is_busy(Ok(false)),
             // Enter receive mode for RSSI checking
             Transaction::start_receive(None),
             // Check noone else is (percievable) transmitting
@@ -459,7 +459,7 @@ mod test {
         // Setup transmit_csma expectations
         radio.expect(&[
             // Check we're not currently busy
-            Transaction::get_state(Ok(MockState::Idle)),
+            Transaction::is_busy(Ok(false)),
             // Enter receive mode for RSSI checking
             Transaction::start_receive(None),
             // Check noone else is (percievable) transmitting

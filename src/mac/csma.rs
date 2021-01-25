@@ -299,11 +299,11 @@ mod test {
 
         // Setup transmit_csma expectations
         radio.expect(&[
-            Transaction::get_state(Ok(MockState::Idle)),
+            Transaction::is_busy(Ok(false)),
             Transaction::start_receive(None),
             Transaction::check_receive(true, Ok(false)),
             Transaction::check_receive(true, Ok(false)),
-            Transaction::get_state(Ok(MockState::Receive)),
+            Transaction::is_busy(Ok(false)),
             Transaction::poll_rssi(Ok(-90i16)),
             Transaction::check_receive(true, Ok(false)),
             Transaction::start_transmit((&buff[..n]).to_vec(), None),
@@ -378,7 +378,7 @@ mod test {
         assert_eq!(mac.state, CoreState::AwaitingAck);
         assert_eq!(mac.last_tick, timer.val());
         assert_eq!(mac.ack_required, true);
-        assert_eq!(mac.retries, mac.config.max_retries);
+        assert_eq!(mac.retries, mac.config.max_retries - 1);
         assert_eq!(mac.tx_buffer, Some(packet.clone()));
 
         radio.done();
@@ -416,7 +416,7 @@ mod test {
             Transaction::check_receive(true, Ok(false)),
             Transaction::check_receive(true, Ok(true)),
             Transaction::get_received(Ok(((&buff[..n]).to_vec(), BasicInfo::default()))),
-            Transaction::get_state(Ok(MockState::Idle)),
+            Transaction::is_busy(Ok(false)),
             Transaction::start_receive(None),
         ]);
 
