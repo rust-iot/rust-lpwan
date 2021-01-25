@@ -1,28 +1,32 @@
 [package]
 name = "lpwan"
-repository = "https://github.com/ryankurte/rust-lpwan"
+repository = "https://github.com/rust-iot/rust-lpwan"
+description = "An LPWAN Network Stack for rust IoT devices"
+keywords = ["iot", "embedded", "lpwan", "wireless", "no_std"]
 version = "0.1.0"
 authors = ["ryan <ryan@kurte.nz>"]
 edition = "2018"
+license = "MPL-2.0"
 
 [features]
-std = [ "rand-facade/os_rng" ]
+std = [ "rand-facade/os_rng", "bytes/std" ]
 mocks = []
-default = []
+default = [ "std" ]
 
 [dependencies]
-radio = "0.7.0"
+radio = "0.8.1"
 ieee802154 = "0.3.0"
 log = "0.4.8"
 heapless = "0.5.5"
 rand_core = "0.5.1"
+bytes = { version = "1.0.1", default-features = false }
 
 [dependencies.rand-facade]
 version = "0.2.0"
 default-features = false
 
 [dev-dependencies]
-radio = { version = "0.7.0", features = ["mock"] }
+radio = { version = "0.8.1", features = ["mock"] }
 simplelog = "0.8.0"
 
 [patch.crates-io]
