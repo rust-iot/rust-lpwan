@@ -353,7 +353,7 @@ where
 
     pub fn transmit_data(&mut self, dest: Address, data: &[u8]) -> Result<(), CoreError<E>> {
         let p = Packet::data(dest, self.address.get(), self.seq, data);
-        self.seq += 1;
+        self.seq = self.seq.overflowing_add(1).0;
         self.set_transmit(p)
     }
 }
