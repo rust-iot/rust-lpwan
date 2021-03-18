@@ -267,7 +267,9 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::vec;
+    extern crate std;
+    
+    use std::{vec, println};
     use ieee802154::mac::*;
 
     use radio::BasicInfo;
@@ -279,7 +281,7 @@ mod test {
 
     #[test]
     fn transmit_with_ack() {
-        let _ = simplelog::SimpleLogger::init(log::LevelFilter::Debug, simplelog::Config::default());
+        let _ = simplelog::SimpleLogger::init(log::LevelFilter::Info, simplelog::Config::default());
 
         let mut packet = Packet::data(
             Address::Short(PanId(1), ShortAddress(2)), 
@@ -315,7 +317,7 @@ mod test {
 
         assert_eq!(mac.tx_buffer, Some(packet.clone()));
 
-        info!("Starting TX");
+        println!("Starting TX");
 
         // Tick MAC to start RX
         timer.inc();
@@ -327,12 +329,12 @@ mod test {
 
         assert_ne!(mac.mode.state, CsmaState::Idle);
 
-        info!("CSMA started");
+        println!("CSMA started");
 
         // Override backoff time to next tick
         if let CsmaState::Pending(_r, t) = &mut mac.mode.state {
             *t = timer.val() + 2;
-            info!("Overriding expiry to: {}", *t);
+            println!("Overriding expiry to: {}", *t);
         }
 
         // Tick to poll rssi
@@ -359,7 +361,7 @@ mod test {
             Transaction::start_receive(None),
         ]);
 
-        info!("Continuing TX");
+        println!("Continuing TX");
 
         // Tick in transmitting state (still transmitting)
         timer.inc();
@@ -368,7 +370,7 @@ mod test {
         assert_eq!(mac.state, CoreState::Transmitting);
         assert_eq!(mac.last_tick, timer.val() - 1);
 
-        info!("Completing TX");
+        println!("Completing TX");
 
         // Tick in transmitting state (transmission done)
         timer.inc();
@@ -386,7 +388,7 @@ mod test {
 
     #[test]
     fn ack_receive() {
-        let _ = simplelog::SimpleLogger::init(log::LevelFilter::Debug, simplelog::Config::default());
+        let _ = simplelog::SimpleLogger::init(log::LevelFilter::Info, simplelog::Config::default());
 
 
         let mut packet = Packet::data(

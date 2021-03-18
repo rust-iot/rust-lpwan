@@ -243,6 +243,7 @@ dependencies = [
 name = "radio"
 version = "0.8.1"
 dependencies = [
+ "bytes",
  "chrono",
  "embedded-hal 1.0.0-alpha.4",
  "embedded-hal-mock",
