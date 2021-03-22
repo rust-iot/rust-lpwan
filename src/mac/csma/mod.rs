@@ -29,6 +29,10 @@ pub enum CsmaState {
 
 #[derive(Debug, PartialEq)]
 pub struct CsmaConfig {
+    pub beacon_period_ms: Option<u32>,
+
+    pub pan_id_filter: Option<u16>,
+
     /// Minimum number of backoffs prior to transmission
     pub min_backoff_count: u32,
 
@@ -45,6 +49,8 @@ pub struct CsmaConfig {
 impl Default for CsmaConfig {
     fn default() -> Self {
         Self {
+            beacon_period_ms: None,
+            pan_id_filter: None,
             min_backoff_count: 1,
             max_backof_count: 5,
             backoff_period_ms: 10,
@@ -69,36 +75,18 @@ impl CsmaConfig {
 impl <R, I, E, T, B> Core<R, T, B, CsmaMode> 
 where
     R: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
-    I: ReceiveInfo + Default,
+    I: ReceiveInfo + Debug + Default,
     B: AsRef<[u8]> + AsMut<[u8]> + Debug,
     T: Timer,
 {
     /// Create a new MAC using the provided radio
     pub fn new_csma(radio: R, timer: T, buffer: B, address: AddressConfig, csma_config: CsmaConfig, core_config: CoreConfig) -> Self {
-        Self{
-            address,
-            config: core_config,
+        let mode = CsmaMode {
+            config: csma_config,
+            state: CsmaState::Idle,
+        };
 
-            state: CoreState::Idle,
-            seq: 0,
-            
-            ack_required: false,
-            retries: 0,
-
-            last_tick: timer.ticks_ms(),
-
-            buffer,
-
-            rx_buffer: None,
-            tx_buffer: None,
-
-            timer,
-            radio,
-            mode: CsmaMode {
-                config: csma_config,
-                state: CsmaState::Idle,
-            },
-        }
+        Core::new_with_mode(radio, timer, buffer, address, core_config, mode)
     }
 }
 
@@ -120,7 +108,7 @@ where
         Core::get_received(self)
     }
 
-    fn tick(&mut self) -> Result<Option<Packet>, Self::Error> {
+    fn tick(&mut self) -> Result<(), Self::Error> {
         let now_ms = self.timer.ticks_ms();
 
         trace!("Tick at tick {} state: {:?}", now_ms, self.state);
@@ -135,7 +123,7 @@ where
                 match self.try_receive() {
                     Ok(Some(packet)) => {
                         self.handle_received(packet)?;
-                        return Ok(None);
+                        return Ok(());
                     },
                     Ok(None) => (),
                     Err(e) => {
@@ -155,7 +143,7 @@ where
                         self.transmit_now(&tx)?;
 
                         self.tx_buffer = Some(tx);
-                        return Ok(None)
+                        return Ok(())
                     }
 
                     // If the channel is busy, reset backoff window
@@ -176,7 +164,7 @@ where
                     debug!("CSMA backoff ok at {} ms", now_ms);
 
                     self.tx_buffer = Some(tx);
-                    return Ok(None)
+                    return Ok(())
                 }
 
                 // Arm TX
@@ -204,13 +192,13 @@ where
                         Some(p) => p,
                         None => {
                             error!("No packet in tx buffer?!");
-                            return Ok(None);
+                            return Ok(());
                         }
                     };
 
                     if !tx.header.ack_request {
                         debug!("TX complete");
-                        return Ok(Some(tx));
+                        return Ok(());
                     } else {
                         debug!("Retrying TX");
                         self.tx_buffer = Some(tx);
@@ -222,13 +210,13 @@ where
                  // Receive packets if available
                 let incoming = match self.try_receive()? {
                     Some(v) => v,
-                    None => return Ok(None),
+                    None => return Ok(()),
                 };
 
                 // Handle incoming ACK packets
                 let acked = self.handle_ack(incoming)?;
                 if acked {
-                    return Ok(None);
+                    return Ok(());
                 }
 
                 // Timeout ACKs
@@ -260,7 +248,7 @@ where
             }
         }
 
-        Ok(None)
+        Ok(())
     }
 }
 

@@ -8,7 +8,8 @@ pub mod error;
 pub use error::*;
 
 pub mod csma;
-use csma::CsmaMode;
+
+pub mod tsch;
 
 pub mod core;
 
@@ -16,8 +17,12 @@ use crate::{packet::Packet};
 
 pub use ieee802154::mac::*;
 
+
 /// Type alias for CSMA based MAC
-pub type CsmaMac<R, T, B> = core::Core<R, T, B, CsmaMode>;
+pub type CsmaMac<R, T, B> = core::Core<R, T, B, csma::CsmaMode>;
+
+/// Type alias for TSCH based MAC
+pub type TschMac<R, T, B> = core::Core<R, T, B, tsch::TschMode>;
 
 
 /// Generic MAC trait, implemented by all MACs
@@ -31,7 +36,7 @@ pub trait Mac {
     fn receive(&mut self) -> Result<Option<Packet>, Self::Error>;
 
     // Update the MAC state
-    fn tick(&mut self) -> Result<Option<Packet>, Self::Error>;
+    fn tick(&mut self) -> Result<(), Self::Error>;
 }
 
 

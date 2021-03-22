@@ -57,6 +57,20 @@ where
 {
     /// Create a new MAC using the provided radio
     pub fn new(radio: R, timer: T, buffer: B, address: AddressConfig, core_config: CoreConfig) -> Self {
+        Core::new_with_mode(radio, timer, buffer, address, core_config, ())
+    }
+}
+
+impl <R, I, E, T, B, M> Core<R, T, B, M> 
+where
+    R: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
+    I: ReceiveInfo + Default + Debug,
+    B: AsRef<[u8]> + AsMut<[u8]>,
+    T: Timer,
+    M: Debug,
+{
+    /// Create a new MAC using the provided radio
+    pub fn new_with_mode(radio: R, timer: T, buffer: B, address: AddressConfig, core_config: CoreConfig, mode: M) -> Self {
         Self{
             address,
             config: core_config,
@@ -76,19 +90,10 @@ where
 
             timer,
             radio,
-            mode: (),
+            mode,
         }
     }
-}
 
-impl <R, I, E, T, B, M> Core<R, T, B, M> 
-where
-    R: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
-    I: ReceiveInfo + Default + Debug,
-    B: AsRef<[u8]> + AsMut<[u8]>,
-    T: Timer,
-    M: Debug,
-{
     pub fn set_transmit(&mut self, packet: Packet) -> Result<(), CoreError<E>> {
         // Check the buffer is not full
         if self.tx_buffer.is_some() {
@@ -166,6 +171,7 @@ where
         if packet.header.ack_request {
             // Generate and transmit ack
             let ack = Packet::ack(&packet);
+            // TODO: insert ack delay
             self.transmit_now(&ack)?;
 
         } else {

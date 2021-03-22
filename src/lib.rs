@@ -16,3 +16,7 @@ pub struct NetConfig {
     pub short_addr: u16,
     pub long_addr: u64,
 }
+
+pub trait Radio<I, E>: radio::State<Error=E> + radio::Busy<Error=E> + radio::Transmit<Error=E> + radio::Receive<Info=I, Error=E> + radio::Rssi<Error=E> {}
+
+
