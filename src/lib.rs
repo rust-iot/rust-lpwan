@@ -8,7 +8,11 @@ pub mod timer;
 
 pub mod packet;
 
+pub mod base;
+
 pub mod mac;
+
+pub mod error;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct NetConfig {
@@ -17,6 +21,7 @@ pub struct NetConfig {
     pub long_addr: u64,
 }
 
-pub trait Radio<I, E>: radio::State<Error=E> + radio::Busy<Error=E> + radio::Transmit<Error=E> + radio::Receive<Info=I, Error=E> + radio::Rssi<Error=E> {}
+/// Radio interface combines `radio` traits
+pub trait Radio<I: radio::ReceiveInfo, E>: radio::State<Error=E> + radio::Busy<Error=E> + radio::Transmit<Error=E> + radio::Receive<Info=I, Error=E> + radio::Rssi<Error=E> {}
 
 

@@ -6,10 +6,10 @@
 /// All methods are monotonic and relative to the same unknown epoc
 pub trait Timer {
     /// Returns the number of millisecond ticks since some unknown epoc
-    fn ticks_ms(&self) -> u32;
+    fn ticks_ms(&self) -> u64;
 
     /// Returns the number of microsecond ticks since some unknown epoc
-    fn ticks_us(&self) -> u32;
+    fn ticks_us(&self) -> u64;
 }
 
 #[cfg(any(test, feature="mocks"))]
@@ -39,14 +39,14 @@ pub mod mock {
     }
 
     impl super::Timer for MockTimer {
-        fn ticks_ms(&self) -> u32 {
+        fn ticks_ms(&self) -> u64 {
             let v = self.0.lock().unwrap();
-            return (*v / 1000) as u32
+            return (*v / 1000)
         }
 
-        fn ticks_us(&self) -> u32 {
+        fn ticks_us(&self) -> u64 {
             let v = self.0.lock().unwrap();
-            return *v as u32
+            return *v
         }
     }
 }

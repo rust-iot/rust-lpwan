@@ -51,8 +51,8 @@ impl Default for CsmaConfig {
         Self {
             beacon_period_ms: None,
             pan_id_filter: None,
-            min_backoff_count: 1,
-            max_backof_count: 5,
+            min_backoff_count: 2,
+            max_backof_count: 10,
             backoff_period_ms: 10,
             max_backoff_retries: 2,
         }
@@ -127,7 +127,6 @@ where
                     },
                     Ok(None) => (),
                     Err(e) => {
-                        self.receive_start()?;
                         return Err(e);
                     }
                 }
@@ -138,7 +137,7 @@ where
 
                     // If the backoff window is complete, transmit
                     if now_ms >= t {
-                        debug!("Backoff expired at {} ms, starting tx", now_ms);
+                        info!("Backoff expired at {} ms, starting tx", now_ms);
 
                         self.transmit_now(&tx)?;
 
@@ -154,7 +153,7 @@ where
 
                             return Err(CoreError::TransmitFailed(tx))
                         } else {
-                            debug!("Backoff error at {} ms, retrying", now_ms);
+                            warn!("Backoff error at {} ms, retrying", now_ms);
                             let backoff_time = now_ms + self.mode.config.backoff_ms();
                             self.mode.state = CsmaState::Pending(r - 1, backoff_time);
                         }
@@ -178,7 +177,7 @@ where
 
                     self.mode.state = CsmaState::Pending(backoff_rounds, backoff_time);
 
-                    debug!("Starting CSMA TX backoff at {} with expiry {}", now_ms, backoff_time);
+                    debug!("Starting CSMA TX backoff with expiry {} at {} ms", backoff_time, now_ms);
 
                 }
             },
@@ -197,17 +196,17 @@ where
                     };
 
                     if !tx.header.ack_request {
-                        debug!("TX complete");
+                        info!("TX complete at {} ms", now_ms);
                         return Ok(());
                     } else {
-                        debug!("Retrying TX");
+                        info!("Retrying TX at {} ms", now_ms);
                         self.tx_buffer = Some(tx);
                         self.retries -= 1;
                     }
                 }
             },
             CoreState::AwaitingAck => {
-                 // Receive packets if available
+                // Receive packets if available
                 let incoming = match self.try_receive()? {
                     Some(v) => v,
                     None => return Ok(()),

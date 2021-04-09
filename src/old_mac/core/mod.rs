@@ -1,7 +1,7 @@
 
 use core::fmt::Debug;
 
-use log::{trace, debug, warn, error};
+use log::{trace, debug, info, warn, error};
 
 use ieee802154::mac::*;
 
@@ -94,6 +94,13 @@ where
         }
     }
 
+    pub fn is_busy(&self) -> bool {
+        match self.state {
+            CoreState::Idle | CoreState::Listening => false,
+            _ => true,
+        }
+    }
+
     pub fn set_transmit(&mut self, packet: Packet) -> Result<(), CoreError<E>> {
         // Check the buffer is not full
         if self.tx_buffer.is_some() {
@@ -152,14 +159,17 @@ where
         let mut info = I::default();
         let n = self.radio.get_received(&mut info, buff).map_err(CoreError::Radio)?;
 
-        debug!("Received ({} bytes): {:?}", n, &buff[..n]);
+        trace!("Received ({} bytes): {:?}", n, &buff[..n]);
 
         // Decode packet
         let packet = Packet::decode(&buff[..n], self.config.rx_has_footer)
             .map_err(CoreError::DecodeError)?;
 
+        info!("RX {} bytes from {:?} at {} ms", n, packet.header.source, now);
+
         // TODO: Filter packets by address
         if !self.check_address_match(&packet.header.destination) {
+            self.receive_start()?;
             return Ok(None)
         }
 
@@ -264,14 +274,14 @@ where
 
     /// Transmit a packet immediately (bypassing CSMA)
     pub fn transmit_now(&mut self, packet: &Packet) -> Result<(), CoreError<E>> {
-        trace!("Do transmit");
+        let now = self.timer.ticks_ms();
 
         let buff = self.buffer.as_mut();
 
         // Encode message
         let n = packet.encode(buff, WriteFooter::No);
 
-        debug!("Transmitting ({} bytes): {:?}", n, &buff[..n]);
+        info!("Transmit {} bytes to {:?} at {} ms", n, packet.header.destination, now);
 
         // Start the transmission
         self.radio.start_transmit(&buff[..n]).map_err(CoreError::Radio)?;
@@ -341,13 +351,13 @@ where
             },
             (Address::Short(_p, s), _extended, Some(short)) => {
                 if (s != short) && (s != &ShortAddress::broadcast()) {
-                    debug!("Short address mismatch");
+                    debug!("Short address mismatch ({:?}, {:?})", s, short);
                     return false;
                 }
             },
             (Address::Extended(_p, e), Some(extended), _short) => {
                 if (e != extended) && (e != &ExtendedAddress::broadcast()) {
-                    debug!("Extended address mismatch");
+                    debug!("Extended address mismatch ({:?}, {:?})", e, extended);
                     return false;
                 }
             },

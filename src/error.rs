@@ -21,5 +21,7 @@ pub enum CoreError<E> {
     Radio(E),
 
     Timeout,
+
+    Busy,
 }
 

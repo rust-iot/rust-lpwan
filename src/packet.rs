@@ -12,6 +12,7 @@ pub const MAX_PAYLOAD_LEN: usize = 256;
 /// 
 /// Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html
 #[derive(Clone, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Packet {
     pub header: Header,
 

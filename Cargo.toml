@@ -20,6 +20,7 @@ log = "0.4.8"
 heapless = "0.5.5"
 rand_core = "0.5.1"
 bytes = { version = "1.0.1", default-features = false }
+defmt = { version = "0.2.1", optional = true }
 
 [dependencies.rand-facade]
 version = "0.2.0"
@@ -28,6 +29,8 @@ default-features = false
 [dev-dependencies]
 radio = { version = "0.8.1", features = ["mock"] }
 simplelog = "0.8.0"
+anyhow = "1.0.40"
+structopt = "0.3.21"
 
 [patch.crates-io]
 radio = { path = "../rust-radio" }
