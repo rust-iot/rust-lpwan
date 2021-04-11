@@ -2,6 +2,7 @@
 use log::{error};
 
 use ieee802154::mac::*;
+use ieee802154::mac::{beacon::Beacon, command::Command};
 
 use heapless::{Vec, consts::U256};
 
@@ -33,13 +34,46 @@ impl PartialEq for Packet {
 }
 
 impl Packet {
+    pub fn beacon(source: Address, seq: u8, beacon: Beacon) -> Packet {
+        Packet {
+            header: Header {
+                frame_type: FrameType::Beacon,
+                frame_pending: false,
+                security: Security::None,
+                ack_request: false,
+                pan_id_compress: false,
+                version: FrameVersion::Ieee802154_2006,
+                destination: Address::broadcast(&AddressMode::Short),
+                source: source,
+                seq: seq,
+            },
+            content: FrameContent::Beacon(beacon),
+            payload: Vec::new(),
+            footer: [0u8; 2],
+        }
+    }
+
+    pub fn command(dest: Address, source: Address, seq: u8, command: Command) -> Packet {
+        Packet {
+            header: Header {
+                frame_type: FrameType::Data,
+                frame_pending: false,
+                security: Security::None,
+                ack_request: false,
+                pan_id_compress: false,
+                version: FrameVersion::Ieee802154_2006,
+                destination: dest,
+                source: source,
+                seq: seq,
+            },
+            content: FrameContent::Command(command),
+            payload: Vec::new(),
+            footer: [0u8; 2],
+        }
+    }
 
     pub fn data(dest: Address, source: Address, seq: u8, data: &[u8]) -> Packet {
-        let mut payload = Vec::new();
-
-        if let Err(e) = payload.extend_from_slice(data) {
-            panic!("Error encoding payload: {:?}", e);
-        };
+        let payload = Vec::from_slice(data).unwrap();
         
         Packet {
             header: Header {
@@ -157,5 +191,14 @@ impl Packet {
         self.payload = Vec::from_slice(body)?;
 
         Ok(())
+    }
+}
+
+#[cfg(feature = "std")]
+impl Into<std::vec::Vec<u8>> for Packet {
+    fn into(self) -> std::vec::Vec<u8> {
+        let mut buff = [0u8; 256];
+        let n = self.encode(&mut buff, WriteFooter::No);
+        buff[..n].to_vec()
     }
 }

@@ -14,7 +14,7 @@ mocks = []
 default = [ "std" ]
 
 [dependencies]
-radio = "0.8.1"
+radio = "0.9.0"
 ieee802154 = "0.3.0"
 log = "0.4.8"
 heapless = "0.5.5"
@@ -27,12 +27,20 @@ version = "0.2.0"
 default-features = false
 
 [dev-dependencies]
-radio = { version = "0.8.1", features = ["mock"] }
+radio = { version = "0.9.0", features = ["mock"] }
 simplelog = "0.8.0"
 anyhow = "1.0.40"
 structopt = "0.3.21"
+radio-sx128x = "0.16.0"
+embedded-hal = "1.0.0-alpha.4"
+driver-pal = "0.8.0-alpha.2"
+ctrlc = "3.1.8"
+humantime = "2.1.0"
 
 [patch.crates-io]
-radio = { path = "../rust-radio" }
+#radio = { path = "../rust-radio" }
+#radio-sx128x = { path = "../rust-radio-sx128x" }
+radio-sx128x = { git = "https://github.com/ryankurte/rust-radio-sx128x" }
+
 #ieee802154 = { path = "../rust-ieee802.15.4" }
 
