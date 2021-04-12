@@ -121,7 +121,7 @@ fn main() -> anyhow::Result<()> {
     debug!("Initialising MAC");
 
     let timer = SystemTimer::new();
-    let mut mac = match Mac::new(address, mac_config, radio, timer) {
+    let mut mac = match Mac::new(address, mac_config, radio, timer.clone()) {
         Ok(m) => m,
         Err(e) => {
             return Err(anyhow::anyhow!("Error initalising MAC: {:?}", e));
@@ -131,14 +131,42 @@ fn main() -> anyhow::Result<()> {
 
     debug!("Starting loop");
 
+    let mut last_tx = timer.ticks_ms();
+
     while running.load(Ordering::SeqCst) {
+        let now = timer.ticks_ms();
         
         // Update the mac
         match mac.tick() {
             Ok(_) => (),
             Err(e) => {
-                error!("MAC error: {:?}", e);
+                error!("MAC tick error: {:?}", e);
             }
+        }
+
+        // Check for RX'd packets
+        let mut buff = [0u8; 256];
+        match mac.receive(&mut buff) {
+            Ok(Some(n)) => {
+                info!("Received data: {:02x?}", &buff[..n]);
+            },
+            Err(e) => {
+                error!("MAC RX error: {:?}", e)
+            },
+            _ => (),
+        }
+
+        // Periodic transmit
+        if now > last_tx + 10_000 {
+            let data = &[0xaa, 0xbb, 0xcc];
+
+            info!("TX {:02x?} at {} ms", data, now);
+
+            if let Err(e) = mac.transmit(Address::broadcast(&AddressMode::Short), data, false) {
+                error!("MAC TX error: {:?}", e);
+            }
+
+            last_tx = now;
         }
 
         // TODO: rx / tx packets

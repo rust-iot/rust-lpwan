@@ -15,13 +15,14 @@ This is intended to provide a simple / testable / composable stack for IoT devic
 
 ## Features
 
-- [ ] [802.15.4](https://en.wikipedia.org/wiki/IEEE_802.15.4)
+- [ ] 802.15.4 - [802.15.4-2015](https://ieeexplore.ieee.org/document/7460875)
   - [ ] CSMA MAC
-  - [ ] TiSCH MAC
+  - [ ] TiSCH MAC - [ietf-6tisch-minimal-](https://tools.ietf.org/html/draft-ietf-6tisch-minimal-21#section-8.4.2.2.3)
 - [ ] LoRaWAN
   - [ ] MAC
   - [ ] ..?
-- [ ] RPL
+- [ ] NDP - [rfc4861](https://tools.ietf.org/html/rfc4861)
+- [ ] RPL - [rfc6550](https://tools.ietf.org/html/rfc6550)
+- [ ] 6LowPan - [rfc4944](https://tools.ietf.org/html/rfc4944), [rfc6282](https://tools.ietf.org/html/rfc6282)
 - [ ] Thread
-- [ ] 6LowPan
 

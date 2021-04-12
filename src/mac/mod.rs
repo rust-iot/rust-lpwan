@@ -1,4 +1,15 @@
-
+use ieee802154::mac::{Address, ExtendedAddress, FrameContent, PanId, ShortAddress, WriteFooter};
+use ieee802154::mac::beacon::{
+    Beacon,
+    BeaconOrder,
+    PendingAddress,
+    GuaranteedTimeSlotInformation
+};
+use ieee802154::mac::command::{
+    Command,
+    CapabilityInformation,
+    AssociationStatus,
+};
 
 use core::{fmt::Debug};
 
@@ -8,144 +19,14 @@ use heapless::{spsc::Queue, consts::U16};
 use rand_core::RngCore;
 use rand_facade::{GlobalRng};
 
-use ieee802154::mac::{Address, ExtendedAddress, FrameContent, PanId, ShortAddress, WriteFooter};
-use ieee802154::mac::beacon::{
-    Beacon,
-    BeaconOrder,
-    PendingAddress,
-    SuperframeOrder,
-    SuperframeSpecification,
-    GuaranteedTimeSlotInformation
-};
-use ieee802154::mac::command::{
-    Command,
-    CapabilityInformation,
-    AssociationStatus,
-};
 
 use crate::{Radio, RawPacket, packet::Packet, error::CoreError, timer::Timer};
-
 use crate::base::{Base, BaseState};
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Config {
-    pub pan_coordinator: bool,
-    pub pan_id: PanId,
+pub mod config;
+pub use config::Config;
 
-    /// Base superframe duration in ms
-    pub base_superframe_duration: u32,
-
-    /// Mac beacon order, sets superframe length
-    /// 
-    /// beacon period = base_superframe_duration * 2^mac_beacon_order, 
-    /// thus a value of 0 sets the superframe length to base_superframe_duration
-    /// Valid values are 0 < v < 15, a value of 15 disables sending beacon frames
-    pub mac_beacon_order: BeaconOrder,
-
-    /// Mac superframe order (ie. how much of that superframe is active)
-    ///
-    /// SD = base_superframe_duration * 2^mac_superframe_order,
-    /// thus for a mac_beacon_order of 1, a mac_superframe_order of 0 would
-    /// be of 2*base_superframe_duration length with a base_superframe_duration active period.
-    /// Valid values are 0 < v < 15, a value of 15 disables the whole superframe
-    pub mac_superframe_order: SuperframeOrder,
-
-    /// Base slot duration in ms
-    pub base_slot_duration: u32,
-
-    /// Number of missed beacons before desync
-    pub max_beacon_misses: u32,
-
-    pub assoc_timeout: u64,
-
-    pub battery_life_extension: bool,
-
-    /// Maximum number of retries
-    pub max_retries: u8,
-
-    /// Delay between packet RX and ACK
-    pub ack_delay: u64,
-
-    /// Minimum backoff exponent
-    pub min_be: u8,
-    /// Maximum backoff exponent
-    pub max_be: u8,
-    /// RSSI threshold for a channel to be determined to be clear
-    pub channel_clear_threshold: i16,
-    /// Maximum number of backoffs
-    pub csma_max_backoffs: u8,
-
-    /// Deadline for MAC operations (maximum allowed schedule slip)
-    pub mac_deadline: u32,
-}
-
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            pan_coordinator: false,
-            pan_id: PanId(0x0100),
-
-            base_superframe_duration: 1000,
-            base_slot_duration: 100,
-
-            mac_beacon_order: BeaconOrder::BeaconOrder(1),
-            mac_superframe_order: SuperframeOrder::SuperframeOrder(0),
-            mac_deadline: 2,
-
-            max_beacon_misses: 10,
-            assoc_timeout: 10*1000,
-            battery_life_extension: true,
-
-            max_retries: 5,
-            ack_delay: 20,
-
-            min_be: 2,
-            max_be: 5,
-            csma_max_backoffs: 3,
-            channel_clear_threshold: -70,
-        }
-    }
-}
-
-impl Config {
-    pub fn superframe_duration(&self) -> u32 {
-        match self.mac_beacon_order {
-            BeaconOrder::BeaconOrder(o) => {
-                (self.base_superframe_duration * 2_u32.pow(o as u32)) as u32
-            },
-            _ => 0,
-        }
-    }
-
-    pub fn superframe_spec(&self) -> SuperframeSpecification {
-        SuperframeSpecification {
-            beacon_order: self.mac_beacon_order,
-            superframe_order: self.mac_superframe_order,
-            pan_coordinator: self.pan_coordinator,
-            // TODO: these values are placeholders and need to be correctly set
-            battery_life_extension: false,
-            association_permit: true,
-            final_cap_slot: 0,
-        }
-    }
-
-    pub fn slots_per_slotframe(&self) -> u64 {
-        (self.base_superframe_duration / self.base_slot_duration) as u64
-    }
-
-    pub fn calculate_sfn(&self, now: u64, offset: u64) -> u64 {
-        (now + offset) / self.superframe_duration() as u64
-    }
-
-    pub fn calculate_asn(&self, now: u64, offset: u64) -> u64 {
-        (now + offset) / self.base_slot_duration as u64
-    }
-
-    pub fn calculate_rsn(&self, now: u64, offset: u64) -> u64 {
-        // TODO: not _sure_ this is correct, slotframe/superframe needs updating to 2015
-        self.calculate_asn(now, offset) % self.slots_per_slotframe()
-    }
-}
+pub mod channels;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MacState {
@@ -160,11 +41,29 @@ pub enum SyncState {
     Synced(Address),
 }
 
+impl SyncState {
+    pub fn is_synced(&self) -> bool {
+        match self {
+            SyncState::Synced(_) => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssocState {
     Unassociated,
     Pending(Address, u64),
     Associated(PanId),
+}
+
+impl AssocState {
+    pub fn is_associated(&self) -> bool {
+        match self {
+            AssocState::Associated(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -279,13 +178,47 @@ where
         Ok(s)
     }
 
-    /// Fetch MAC address
-    fn addr(&self) -> Address {
+    /// Enqueue a packet for TX
+    pub fn transmit(&mut self, dest: Address, data: &[u8], ack: bool) -> Result<(), CoreError<E>> {
+        // Setup packet for sending
+        let packet = Packet::data(dest, self.addr(), self.seq(), data, ack);
+
+        // Enqueue in TX buffer
+        if let Err(_e) = self.tx_buff.enqueue((TxState::default(), packet)) {
+            error!("Error enqueuing packet to send");
+        }
+
+        Ok(())
+    }
+
+    /// Check for received packets
+    pub fn receive(&mut self, data: &mut[u8]) -> Result<Option<usize>, CoreError<E>> {
+        // Fetch from RX buffer
+        let rx = match self.rx_buff.dequeue() {
+            Some(rx) => rx,
+            None => return Ok(None)
+        };
+
+        // Decode data
+        let payload = rx.payload();
+        &data[..payload.len()].copy_from_slice(&payload);
+
+        // Return payload length
+        Ok(Some(payload.len()))
+    }
+
+    /// Fetch configured MAC address
+    pub fn addr(&self) -> Address {
         // TODO: use broadcast(?) pan_id if unjoined
         match self.short_addr {
             Some(s) => Address::Short(self.config.pan_id, s),
             None => Address::Extended(self.config.pan_id, self.address),
         }
+    }
+
+    /// Fetch MAC state
+    pub fn state(&self) -> (SyncState, AssocState) {
+        (self.sync_state.clone(), self.assoc_state.clone())
     }
 
     /// Fetch and increment TX sequence number
@@ -672,8 +605,12 @@ where
                     self.sync_state = SyncState::Synced(p.header.source);
                     // TODO: in TSCH impls sync offset set based on ASN
                     self.sync_offset = now;
+
                     self.next_beacon = now + self.config.superframe_duration() as u64;
                     self.beacon_miss_count = 0;
+
+                    debug!("Received beacon at {} ms (set offset to {} ms)",
+                        now, self.sync_offset);
 
                 // If we're synced use this to evaluate drift and correct _if_ it's from
                 //our parent
@@ -685,14 +622,23 @@ where
                         // Compute offset from expected time
                         // This is improved by TSCH EBs / ASNs huh?
                         // TODO: what happens if we're > one slot out of sync
-                        let offset = now as i64 - self.next_beacon as i64;
+                        let mut delta = (now as i64 - self.next_beacon as i64) as i64
+                                % self.config.superframe_duration() as i64;
 
-                        debug!("Received new beacon at {} ms (expected at {} ms, offset: {} ms)",
-                            now, self.next_beacon, offset);
+                        debug!("current offset: {} delta: {}", self.sync_offset, delta);
                         
                         // Update stack synchronization offset
                         // TODO: improve this to a piecewise / averaging offset correction
-                        self.sync_offset = offset as u64 % self.config.superframe_duration() as u64;
+                        if delta.abs() > self.config.superframe_duration() as i64 / 10 {
+                            // Ignore huge corrections (ie. one slot out of time)
+                        } else if delta < 0 {
+                            self.sync_offset -= delta.abs() as u64 / 2;
+                        } else {
+                            self.sync_offset += delta.abs() as u64 / 2;
+                        }
+                        
+                        debug!("Received new beacon at {} ms (expected at {} ms, error: {} ms, updated offset to {} ms)",
+                        now, self.next_beacon, delta, self.sync_offset);
 
                         // Set new beacon time
                         // TODO: really this should happen in tick rather than here?
@@ -783,7 +729,10 @@ where
                 }
             },
             FrameContent::Data => {
-                info!("RX data: {:02x?}", p.payload());
+                // Enqueue in RX buffer
+                if let Err(_e) = self.rx_buff.enqueue(p) {
+                    error!("Error adding packet to RX queue");
+                }
             },
         }
 

@@ -71,7 +71,7 @@ impl Packet {
         }
     }
 
-    pub fn data(dest: Address, source: Address, seq: u8, data: &[u8]) -> Packet {
+    pub fn data(dest: Address, source: Address, seq: u8, data: &[u8], ack: bool) -> Packet {
         let payload = Vec::from_slice(data).unwrap();
         
         Packet {
@@ -79,7 +79,7 @@ impl Packet {
                 frame_type: FrameType::Data,
                 frame_pending: false,
                 security: Security::None,
-                ack_request: false,
+                ack_request: ack,
                 pan_id_compress: false,
                 version: FrameVersion::Ieee802154_2006,
                 destination: dest,
