@@ -544,15 +544,10 @@ where
             }
         };
 
-        trace!("Received packet: {:?}", p);
-
+        trace!("Received {} byte {:?} packet", p.payload().len(), p.header.frame_type);
 
         // Filter by PAN ID
-        let pan_id = match p.header.destination {
-            Address::Short(pan_id, _) => pan_id,
-            Address::Extended(pan_id, _) => pan_id,
-            Address::None => unimplemented!(),
-        };
+        let pan_id = p.pan_id();
         if pan_id != PanId::broadcast() {
             match &self.assoc_state {
                 AssocState::Associated(id) if pan_id != *id => {
@@ -735,6 +730,8 @@ where
                 }
             },
             FrameContent::Data => {
+                debug!("Received {} bytes of data from {:?}", p.payload().len(), p.header.source);
+
                 let i = RxInfo{
                     source: p.header.source,
                     rssi: rx.rssi,

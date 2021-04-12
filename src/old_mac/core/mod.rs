@@ -153,7 +153,7 @@ where
             return Ok(None)
         }
 
-        trace!("MAC received packet at tick {} ms", now);
+        debug!("MAC received packet at tick {} ms", now);
 
         // Fetch received packets
         let mut info = I::default();

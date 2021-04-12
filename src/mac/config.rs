@@ -67,19 +67,19 @@ impl Default for Config {
             pan_coordinator: false,
             pan_id: PanId(0x0100),
 
-            base_superframe_duration: 2000,
-            base_slot_duration: 400,
+            base_superframe_duration: 1000,
+            base_slot_duration: 100,
 
-            mac_beacon_order: BeaconOrder::BeaconOrder(0),
+            mac_beacon_order: BeaconOrder::BeaconOrder(1),
             mac_superframe_order: SuperframeOrder::SuperframeOrder(0),
-            mac_deadline: 2,
+            mac_deadline: 10,
 
             max_beacon_misses: 10,
             assoc_timeout: 10*1000,
             battery_life_extension: true,
 
             max_retries: 5,
-            ack_delay: 100,
+            ack_delay: 50,
 
             min_be: 2,
             max_be: 5,

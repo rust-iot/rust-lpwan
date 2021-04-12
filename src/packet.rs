@@ -112,6 +112,21 @@ impl Packet {
         }
     }
 
+    pub fn pan_id(&self) -> PanId {
+        match self.header.destination {
+            Address::Short(pan_id, _) => return pan_id,
+            Address::Extended(pan_id, _) => return pan_id,
+            _ => (),
+        }
+        match self.header.source {
+            Address::Short(pan_id, _) => return pan_id,
+            Address::Extended(pan_id, _) => return pan_id,
+            _ => (),
+        }
+
+        return PanId(0xFFFE)
+    }
+
     // Check whether this packet is an ack for the provided packet
     pub fn is_ack_for(&self, original: &Packet) -> bool {
         self.header.frame_type == FrameType::Acknowledgement &&
