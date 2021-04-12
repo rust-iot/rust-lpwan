@@ -112,7 +112,7 @@ fn main() -> anyhow::Result<()> {
     }
 
     // Initialise network stack
-    let address = ExtendedAddress(10);
+    let address = ExtendedAddress(rand::random::<u64>() % 1000);
     let mut mac_config = MacConfig {
         pan_coordinator: opts.coordinator,
         ..Default::default()

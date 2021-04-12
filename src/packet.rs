@@ -1,5 +1,4 @@
 
-use log::{error};
 
 use ieee802154::mac::*;
 use ieee802154::mac::{beacon::Beacon, command::Command};
@@ -59,7 +58,7 @@ impl Packet {
                 frame_type: FrameType::MacCommand,
                 frame_pending: false,
                 security: Security::None,
-                ack_request: false,
+                ack_request: true,
                 pan_id_compress: false,
                 version: FrameVersion::Ieee802154_2006,
                 destination: dest,
@@ -171,6 +170,8 @@ impl Packet {
         // Decode the FrameContent
         let (content, used) = FrameContent::decode(body, &header)?;
         remaining -= used;
+
+        let _ = remaining;
 
         // Copy out the payload
         let payload = Vec::from_slice(&body[used..]).map_err(|_e| DecodeError::NotEnoughBytes)?;

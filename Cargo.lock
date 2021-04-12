@@ -578,6 +578,7 @@ dependencies = [
  "log",
  "radio",
  "radio-sx128x",
+ "rand 0.8.3",
  "rand-facade",
  "rand_core 0.5.1",
  "simplelog 0.8.0",

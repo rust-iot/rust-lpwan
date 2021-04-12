@@ -1,9 +1,9 @@
 
 
-use core::{fmt::Debug, marker::PhantomData};
+use core::{fmt::Debug};
 
 use log::{trace, debug, info, warn, error};
-use heapless::{Vec, spsc::Queue, consts::U16};
+use heapless::{spsc::Queue, consts::U16};
 
 use rand_core::RngCore;
 use rand_facade::{GlobalRng};
@@ -63,6 +63,8 @@ pub struct Config {
     /// Maximum number of retries
     pub max_retries: u8,
 
+    /// Delay between packet RX and ACK
+    pub ack_delay: u64,
 
     /// Minimum backoff exponent
     pub min_be: u8,
@@ -95,11 +97,12 @@ impl Default for Config {
             battery_life_extension: true,
 
             max_retries: 5,
+            ack_delay: 20,
 
             min_be: 2,
             max_be: 5,
             csma_max_backoffs: 3,
-            channel_clear_threshold: -90,
+            channel_clear_threshold: -70,
         }
     }
 }
@@ -189,6 +192,16 @@ pub enum CsmaState {
     },
 }
 
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AckState {
+    None,
+    Pending {
+        packet: Packet,
+        tx_time: u64,
+    },
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Mac<R, S, I, E, T> {
     pub address: ExtendedAddress,
@@ -208,6 +221,7 @@ pub struct Mac<R, S, I, E, T> {
     sync_state: SyncState,
     assoc_state: AssocState,
     csma_state: CsmaState,
+    ack_state: AckState,
 
     rx_buff: Queue<Packet, U16>,
     tx_buff: Queue<(TxState, Packet), U16>,
@@ -235,9 +249,11 @@ where
             last_asn: 0,
             next_beacon: 0,
             beacon_miss_count: 0,
+
             sync_state: SyncState::Unsynced,
             assoc_state: AssocState::Unassociated,
             csma_state: CsmaState::None,
+            ack_state: AckState::None,
 
             rx_buff: Queue::new(),
             tx_buff: Queue::new(),
@@ -246,11 +262,15 @@ where
         let now = s.timer.ticks_ms();
         s.sync_offset = now;
 
-        debug!("Setup MAC at {} ms", now);
+        debug!("Setup MAC with address {:?} at {} ms", s.address, now);
 
         if s.config.pan_coordinator && s.config.mac_beacon_order != BeaconOrder::OnDemand {
             s.next_beacon = now + s.config.superframe_duration() as u64;
             debug!("Setup next beacon for {} ms", s.next_beacon);
+        }
+
+        if s.config.pan_coordinator {
+            s.assoc_state = AssocState::Associated(s.config.pan_id);
         }
 
         debug!("Set radio to receive mode");
@@ -295,11 +315,6 @@ where
             self.handle_received(now_ms, rx)?;
         }
 
-        // Skip polling if ASN hasn't changed
-        if self.last_asn == asn {
-            return Ok(())
-        }
-
         // Compute state based on slot
         // TODO: refactor this out so that the slot selector can be unit tested
         
@@ -315,6 +330,25 @@ where
         // Standard beacon takes place in the first slot
         if rsn == 0 {    
             self.tick_beacon(now_ms, asn)?;
+        }
+
+        // Transmit ACKs if scheduled
+        match self.ack_state.clone() {
+            AckState::Pending{packet: _, tx_time} if now_ms > (tx_time + self.config.mac_deadline as u64) => {
+                warn!("ACK failed, deadline exceeded (expected: {} actual: {})", tx_time, now_ms);
+                self.ack_state = AckState::None;
+            },
+            AckState::Pending{packet, tx_time} if tx_time < now_ms => {
+                debug!("Sending ACK for packet {} from {:?} at {} ms", packet.header.seq, packet.header.destination, now_ms);
+
+                let mut buff = [0u8; 256];
+                let n = packet.encode(&mut buff, WriteFooter::No);
+
+                self.base.transmit(now_ms, &buff[..n])?;
+
+                self.ack_state = AckState::None;
+            },
+            _ => (),
         }
 
         // TODO: CSMA operations take place during Contention Access Period (CAP), starting from the beacon frame
@@ -341,7 +375,7 @@ where
                 let assoc = Packet::command(parent, self.addr(), self.seq(), assoc_cmd);
 
                 // TODO: handle error
-                if let Err(e) = self.tx_buff.enqueue((TxState::default(), assoc)) {
+                if let Err(_) = self.tx_buff.enqueue((TxState::default(), assoc)) {
                     error!("Error adding associate request to tx buffer");
                 }
 
@@ -349,7 +383,7 @@ where
             },
             // Timeout pending associations
             (SyncState::Synced(_parent), AssocState::Pending(_assoc_parent, expiry)) => {
-                if(now_ms > expiry) {
+                if now_ms > expiry {
                     warn!("Association request expired at {} ms", now_ms);
                     // TODO: association backoff? forced de-sync to retry?
                     self.assoc_state = AssocState::Unassociated;
@@ -371,6 +405,11 @@ where
     }
 
     fn tick_beacon(&mut self, now_ms: u64, asn: u64) -> Result<(), CoreError<E>> {
+
+        // No ASN change / nothing we need to do for beaconing
+        if self.last_asn == asn {
+            return Ok(())
+        }
 
         // No pending beacon or not yet expected beacon time
         if self.next_beacon == 0 || self.next_beacon > now_ms {
@@ -474,8 +513,18 @@ where
                 }
 
             // Otherwise if we have something to TX, get started
-            } else if let Some(tx) = self.tx_buff.peek() {
+            } else if let Some(tx) = self.tx_buff.peek().map(|v| v.clone() ) {
                 debug!("Found pending packet {} to: {:?}", tx.1.header.seq, tx.1.header.destination);
+
+                // Check TX retries and increase counter
+                if tx.0.retries > self.config.max_retries {
+                    debug!("Packet TX failed, {} exceeded max retries", tx.1.header.seq);
+                    let _ = self.tx_buff.dequeue();
+                    return Ok(())
+                }
+                self.tx_buff.iter_mut()
+                    .find(|(_, p)| p.header.seq == tx.1.header.seq )
+                    .map(|(i, _)| i.retries += 1 ); 
 
                 // Calcuate backoff periods for TX
                 let be = match self.config.battery_life_extension {
@@ -527,7 +576,7 @@ where
                 if !packet.header.ack_request {
                     let _ = self.tx_buff.dequeue();
                 } else {
-                    // TODO: stop TX / apply retry? idk
+                    // TODO: arm ACK RX?
                 }
 
             } else if tx_slot != 0 && asn > tx_slot {
@@ -556,11 +605,53 @@ where
 
         trace!("Received packet: {:?}", p);
 
-        // TODO: filter by pan ID depending on filters / network state
+
+        // Filter by PAN ID
+        let pan_id = match p.header.destination {
+            Address::Short(pan_id, _) => pan_id,
+            Address::Extended(pan_id, _) => pan_id,
+            Address::None => unimplemented!(),
+        };
+        if pan_id != PanId::broadcast() {
+            match &self.assoc_state {
+                AssocState::Associated(id) if pan_id != *id => {
+                    debug!("Pan ID mismatch, dropped packet {} for {:?}", p.header.seq, pan_id);  
+                    return Ok(())
+                },
+                _ => (),
+            }
+        }
+
+        // Filter by address
+        match (p.header.destination, self.short_addr) {
+            // Accept messages to broadcast short address
+            (Address::Short(_, short), _) if short == ShortAddress::broadcast() => (),
+            // Accept messages to our short address
+            (Address::Short(_, short), Some(addr)) if short == addr => (),
+            // Accept messages to our extended address
+            (Address::Extended(_, ext), _) if ext == self.address => (),
+            _ => {
+                debug!("Address mismatch, dropped packet {} for {:?}", p.header.seq, p.header.destination);  
+                return Ok(())
+            },
+        };
+
+        // Arm ACK response if required
+        if p.header.ack_request {
+            // Build ACK payload
+
+            let ack = Packet::ack(&p);
+            self.ack_state = AckState::Pending{
+                tx_time: now + self.config.ack_delay, 
+                packet: ack,
+            };
+
+            debug!("Scheduled ACK for packet {} from {:?} for {} ms", p.header.seq, p.header.source, now + self.config.ack_delay);
+        }
 
         // Handle received packets
         match p.content {
-            FrameContent::Beacon(b) => {
+            FrameContent::Beacon(_b) => {
                 debug!("Received beacon from {:?} at {} ms", p.header.source, now);
 
                 // If we're the pan coordinator we're not going to _sync_ on this
@@ -616,11 +707,10 @@ where
 
             },
             FrameContent::Command(c) => {
-                info!("RX command: {:?}", c);
 
                 match c {
                     Command::AssociationRequest(req) => {
-                        debug!("Association request from: {:?}", p.header.source);
+                        debug!("Association request from: {:?} (cap: {:?}", p.header.source, req);
 
                         // TODO: check whether to allow association?
 
@@ -635,7 +725,7 @@ where
                         let assoc_cmd = Command::AssociationResponse(assoc_addr, assoc_status);
                         let assoc_resp = Packet::command(p.header.source, self.addr(), self.seq(), assoc_cmd);
 
-                        if let Err(e) = self.tx_buff.enqueue((TxState::default(), assoc_resp)) {
+                        if let Err(_) = self.tx_buff.enqueue((TxState::default(), assoc_resp)) {
                             error!("Error adding associate request to tx buffer");
                         }
 
@@ -669,12 +759,28 @@ where
                             self.assoc_state = AssocState::Unassociated;
                         }
                     }
-                    _ => (),
+                    _ => {
+                        info!("RX unhandled command: {:?}", c);
+                    },
                 }
 
             },
             FrameContent::Acknowledgement => {
-                info!("RX ack for packet: {}", p.header.seq);
+                match self.tx_buff.peek() {
+                    Some((_s, t)) if p.is_ack_for(t) => {
+                        debug!("ACK rx for packet: {}!", p.header.seq);
+
+                        // Remove from TX buffer
+                        // TODO: signal success to higher level?
+                        let _ = self.tx_buff.dequeue();
+                    }
+                    Some((_s, _t)) => {
+                        warn!("ACK sequence mismatch");
+                    },
+                    None => {
+                        warn!("ACK with no pending operation");
+                    }
+                }
             },
             FrameContent::Data => {
                 info!("RX data: {:02x?}", p.payload());

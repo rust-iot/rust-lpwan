@@ -1,12 +1,9 @@
 
 use core::{fmt::Debug, marker::PhantomData};
 
+use log::debug;
 
-use log::{debug, info, warn};
-
-use ieee802154::mac::*;
-
-use crate::{Radio, RawPacket, timer::Timer, error::CoreError};
+use crate::{Radio, RawPacket, error::CoreError};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Base<R, S, I, E> {
@@ -107,7 +104,7 @@ where
     }
 
     /// Fetch the channel RSSI
-    pub fn rssi(&mut self, now: u64) -> Result<i16, CoreError<E>> {
+    pub fn rssi(&mut self, _now: u64) -> Result<i16, CoreError<E>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
