@@ -56,7 +56,7 @@ impl Packet {
     pub fn command(dest: Address, source: Address, seq: u8, command: Command) -> Packet {
         Packet {
             header: Header {
-                frame_type: FrameType::Data,
+                frame_type: FrameType::MacCommand,
                 frame_pending: false,
                 security: Security::None,
                 ack_request: false,

@@ -94,10 +94,10 @@ fn main() -> anyhow::Result<()> {
     };
 
     debug!("Initialising Radio");
-    let mut rf_config = Sx128xConfig::lora();
+    let mut rf_config = Sx128xConfig::gfsk();
     if let Modem::Gfsk(gfsk) = &mut rf_config.modem {
         gfsk.patch_preamble = false;
-        //gfsk.crc_mode = radio_sx128x::device::common::GfskFlrcCrcModes::RADIO_CRC_2_BYTES;
+        gfsk.crc_mode = radio_sx128x::device::common::GfskFlrcCrcModes::RADIO_CRC_2_BYTES;
     }
 
     let mut radio = match Sx128x::spi(spi, pins.cs, pins.busy, pins.ready, pins.reset, HalDelay{}, &rf_config) {
