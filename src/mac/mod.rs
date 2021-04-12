@@ -82,6 +82,12 @@ impl Default for TxState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct RxInfo {
+    pub source: Address,
+    pub rssi: i16,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum CsmaState {
     None,
     Pending {
@@ -122,7 +128,7 @@ pub struct Mac<R, S, I, E, T> {
     csma_state: CsmaState,
     ack_state: AckState,
 
-    rx_buff: Queue<Packet, U16>,
+    rx_buff: Queue<(RxInfo, Packet), U16>,
     tx_buff: Queue<(TxState, Packet), U16>,
 }
 
@@ -192,7 +198,7 @@ where
     }
 
     /// Check for received packets
-    pub fn receive(&mut self, data: &mut[u8]) -> Result<Option<usize>, CoreError<E>> {
+    pub fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo)>, CoreError<E>> {
         // Fetch from RX buffer
         let rx = match self.rx_buff.dequeue() {
             Some(rx) => rx,
@@ -200,11 +206,11 @@ where
         };
 
         // Decode data
-        let payload = rx.payload();
+        let payload = rx.1.payload();
         &data[..payload.len()].copy_from_slice(&payload);
 
         // Return payload length
-        Ok(Some(payload.len()))
+        Ok(Some((payload.len(), rx.0)))
     }
 
     /// Fetch configured MAC address
@@ -267,11 +273,11 @@ where
 
         // Transmit ACKs if scheduled
         match self.ack_state.clone() {
-            AckState::Pending{packet: _, tx_time} if now_ms > (tx_time + self.config.mac_deadline as u64) => {
-                warn!("ACK failed, deadline exceeded (expected: {} actual: {})", tx_time, now_ms);
-                self.ack_state = AckState::None;
-            },
             AckState::Pending{packet, tx_time} if tx_time < now_ms => {
+                if now_ms > (tx_time + self.config.mac_deadline as u64) {
+                    warn!("ACK deadline exceeded (expected: {} actual: {})", tx_time, now_ms);
+                }
+
                 debug!("Sending ACK for packet {} from {:?} at {} ms", packet.header.seq, packet.header.destination, now_ms);
 
                 let mut buff = [0u8; 256];
@@ -311,6 +317,8 @@ where
                 if let Err(_) = self.tx_buff.enqueue((TxState::default(), assoc)) {
                     error!("Error adding associate request to tx buffer");
                 }
+
+                info!("Received network sync, issuing association request");
 
                 self.assoc_state = AssocState::Pending(parent.clone(), now_ms + self.config.assoc_timeout);
             },
@@ -622,10 +630,10 @@ where
                         // Compute offset from expected time
                         // This is improved by TSCH EBs / ASNs huh?
                         // TODO: what happens if we're > one slot out of sync
-                        let mut delta = (now as i64 - self.next_beacon as i64) as i64
+                        let delta = (now as i64 - self.next_beacon as i64) as i64
                                 % self.config.superframe_duration() as i64;
 
-                        debug!("current offset: {} delta: {}", self.sync_offset, delta);
+                        trace!("current offset: {} delta: {}", self.sync_offset, delta);
                         
                         // Update stack synchronization offset
                         // TODO: improve this to a piecewise / averaging offset correction
@@ -687,8 +695,6 @@ where
                             _ => (),
                         }
 
-                        // To
-
                         if assoc_state == AssociationStatus::Successful {
 
                             let pan_id = p.header.source.pan_id().unwrap();
@@ -729,8 +735,13 @@ where
                 }
             },
             FrameContent::Data => {
+                let i = RxInfo{
+                    source: p.header.source,
+                    rssi: rx.rssi,
+                };
+
                 // Enqueue in RX buffer
-                if let Err(_e) = self.rx_buff.enqueue(p) {
+                if let Err(_e) = self.rx_buff.enqueue((i, p)) {
                     error!("Error adding packet to RX queue");
                 }
             },

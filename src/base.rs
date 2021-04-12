@@ -1,7 +1,7 @@
 
 use core::{fmt::Debug, marker::PhantomData};
 
-use log::debug;
+use log::{trace, debug};
 
 use crate::{Radio, RawPacket, error::CoreError};
 
@@ -78,7 +78,7 @@ where
         }
 
         debug!("Transmit {} bytes at {} ms", data.len(), now);
-        debug!("{:02x?}", data);
+        trace!("{:02x?}", data);
 
         // Start the transmission
         self.radio.start_transmit(&data).map_err(CoreError::Radio)?;
@@ -160,7 +160,7 @@ where
         pkt.rssi = info.rssi();
 
         debug!("Received {} bytes with RSSI {} at {} ms", pkt.len, info.rssi(), now);
-        debug!("{:02x?}", pkt.data());
+        trace!("{:02x?}", pkt.data());
 
         // Restart RX
         self.radio.start_receive().map_err(CoreError::Radio)?;

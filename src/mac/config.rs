@@ -67,10 +67,10 @@ impl Default for Config {
             pan_coordinator: false,
             pan_id: PanId(0x0100),
 
-            base_superframe_duration: 1000,
-            base_slot_duration: 100,
+            base_superframe_duration: 2000,
+            base_slot_duration: 400,
 
-            mac_beacon_order: BeaconOrder::BeaconOrder(1),
+            mac_beacon_order: BeaconOrder::BeaconOrder(0),
             mac_superframe_order: SuperframeOrder::SuperframeOrder(0),
             mac_deadline: 2,
 
@@ -79,7 +79,7 @@ impl Default for Config {
             battery_life_extension: true,
 
             max_retries: 5,
-            ack_delay: 20,
+            ack_delay: 100,
 
             min_be: 2,
             max_be: 5,

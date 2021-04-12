@@ -20,7 +20,6 @@ pub mod error;
 
 pub mod prelude;
 
-pub mod channels;
 
 /// Timestamps are 64-bit in milliseconds
 pub type Ts = u64;
@@ -51,14 +50,7 @@ impl RawPacket {
 /// Radio interface combines `radio` traits
 pub trait Radio<S: radio::RadioState, I: radio::ReceiveInfo, E: Debug>: radio::State<State=S, Error=E> + radio::Busy<Error=E> + radio::Transmit<Error=E> + radio::Receive<Info=I, Error=E> + radio::Rssi<Error=E> {}
 
+/// Default Radio impl for radio devices
 impl <T, S: radio::RadioState, I: ReceiveInfo, E: Debug> Radio<S, I, E> for T where 
     T: State<State=S, Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
 {}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct NetConfig {
-    pub pan_id: u16,
-    pub short_addr: u16,
-    pub long_addr: u64,
-}
-
