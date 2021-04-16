@@ -53,7 +53,7 @@ impl SystemTimer {
     }
 }
 
-impl Timer for SystemTimer {
+impl MacTimer for SystemTimer {
     fn ticks_ms(&self) -> u64 {
         Instant::now().duration_since(self.start).as_millis() as u64
     }
@@ -147,7 +147,7 @@ fn main() -> anyhow::Result<()> {
         // Check for RX'd packets
         let mut buff = [0u8; 256];
         match mac.receive(&mut buff) {
-            Ok(Some(n)) => {
+            Ok(Some((n, _i))) => {
                 info!("Received data: {:02x?}", &buff[..n]);
             },
             Err(e) => {
@@ -162,7 +162,7 @@ fn main() -> anyhow::Result<()> {
 
             info!("TX {:02x?} at {} ms", data, now);
 
-            if let Err(e) = mac.transmit(Address::broadcast(&AddressMode::Short), data, false) {
+            if let Err(e) = mac.transmit(MacAddress::broadcast(&AddressMode::Short), data, false) {
                 error!("MAC TX error: {:?}", e);
             }
 

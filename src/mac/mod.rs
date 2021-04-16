@@ -19,7 +19,6 @@ use heapless::{spsc::Queue, consts::U16};
 use rand_core::RngCore;
 use rand_facade::{GlobalRng};
 
-
 use crate::{Radio, RawPacket, packet::Packet, error::CoreError, timer::Timer};
 use crate::base::{Base, BaseState};
 
@@ -27,6 +26,7 @@ pub mod config;
 pub use config::Config;
 
 pub mod channels;
+
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MacState {

@@ -12,11 +12,13 @@ pub mod timer;
 
 pub mod packet;
 
+pub mod error;
+
 pub mod base;
 
 pub mod mac;
 
-pub mod error;
+pub mod ip6;
 
 pub mod prelude;
 

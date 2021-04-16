@@ -21,6 +21,7 @@ heapless = "0.5.5"
 rand_core = "0.5.1"
 bytes = { version = "1.0.1", default-features = false }
 defmt = { version = "0.2.1", optional = true }
+byteorder = "1.4.3"
 
 [dependencies.rand-facade]
 version = "0.2.0"
