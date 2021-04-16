@@ -1,3 +1,7 @@
+
+
+use core::{fmt::Debug};
+
 use ieee802154::mac::{Address, ExtendedAddress, FrameContent, PanId, ShortAddress, WriteFooter};
 use ieee802154::mac::beacon::{
     Beacon,
@@ -11,7 +15,6 @@ use ieee802154::mac::command::{
     AssociationStatus,
 };
 
-use core::{fmt::Debug};
 
 use log::{trace, debug, info, warn, error};
 use heapless::{spsc::Queue, consts::U16};
@@ -19,11 +22,14 @@ use heapless::{spsc::Queue, consts::U16};
 use rand_core::RngCore;
 use rand_facade::{GlobalRng};
 
-use crate::{Radio, RawPacket, packet::Packet, error::CoreError, timer::Timer};
+use crate::{Mac as MacIf, Radio, RawPacket, RxInfo, error::CoreError, timer::Timer};
 use crate::base::{Base, BaseState};
 
 pub mod config;
 pub use config::Config;
+
+pub mod packet;
+pub use packet::Packet;
 
 pub mod channels;
 
@@ -80,13 +86,6 @@ impl Default for TxState {
         }
     }
 }
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct RxInfo {
-    pub source: Address,
-    pub rssi: i16,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum CsmaState {
     None,
@@ -131,6 +130,8 @@ pub struct Mac<R, S, I, E, T> {
     rx_buff: Queue<(RxInfo, Packet), U16>,
     tx_buff: Queue<(TxState, Packet), U16>,
 }
+
+
 
 impl <R, S, I, E, T> Mac<R, S, I, E, T> 
 where
@@ -183,9 +184,20 @@ where
 
         Ok(s)
     }
+}
+
+impl <R, S, I, E, T> MacIf<Address> for Mac<R, S, I, E, T> 
+where
+    R: Radio<S, I, E>,
+    S: radio::RadioState,
+    I: radio::ReceiveInfo + Default + Debug,
+    E: Debug,
+    T: Timer,
+{
+    type Error = CoreError<E>;
 
     /// Enqueue a packet for TX
-    pub fn transmit(&mut self, dest: Address, data: &[u8], ack: bool) -> Result<(), CoreError<E>> {
+    fn transmit(&mut self, dest: Address, data: &[u8], ack: bool) -> Result<(), Self::Error> {
         // Setup packet for sending
         let packet = Packet::data(dest, self.addr(), self.seq(), data, ack);
 
@@ -198,7 +210,7 @@ where
     }
 
     /// Check for received packets
-    pub fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo)>, CoreError<E>> {
+    fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo)>, Self::Error> {
         // Fetch from RX buffer
         let rx = match self.rx_buff.dequeue() {
             Some(rx) => rx,
@@ -213,29 +225,7 @@ where
         Ok(Some((payload.len(), rx.0)))
     }
 
-    /// Fetch configured MAC address
-    pub fn addr(&self) -> Address {
-        // TODO: use broadcast(?) pan_id if unjoined
-        match self.short_addr {
-            Some(s) => Address::Short(self.config.pan_id, s),
-            None => Address::Extended(self.config.pan_id, self.address),
-        }
-    }
-
-    /// Fetch MAC state
-    pub fn state(&self) -> (SyncState, AssocState) {
-        (self.sync_state.clone(), self.assoc_state.clone())
-    }
-
-    /// Fetch and increment TX sequence number
-    fn seq(&mut self) -> u8 {
-        let s = self.seq;
-        self.seq = self.seq.wrapping_add(1);
-        s
-    }
-
-    pub fn tick(&mut self) -> Result<(), CoreError<E>> {
-
+    fn tick(&mut self) -> Result<(), Self::Error> {
         let now_ms = self.timer.ticks_ms();
         
         let last_sync_state = self.sync_state.clone();
@@ -343,6 +333,36 @@ where
         }
 
         Ok(())
+    }
+}
+
+impl <R, S, I, E, T> Mac<R, S, I, E, T> 
+where
+    R: Radio<S, I, E>,
+    S: radio::RadioState,
+    I: radio::ReceiveInfo + Default + Debug,
+    E: Debug,
+    T: Timer,
+{
+    /// Fetch configured MAC address
+    pub fn addr(&self) -> Address {
+        // TODO: use broadcast(?) pan_id if unjoined
+        match self.short_addr {
+            Some(s) => Address::Short(self.config.pan_id, s),
+            None => Address::Extended(self.config.pan_id, self.address),
+        }
+    }
+
+    /// Fetch MAC state
+    pub fn state(&self) -> (SyncState, AssocState) {
+        (self.sync_state.clone(), self.assoc_state.clone())
+    }
+
+    /// Fetch and increment TX sequence number
+    fn seq(&mut self) -> u8 {
+        let s = self.seq;
+        self.seq = self.seq.wrapping_add(1);
+        s
     }
 
     fn tick_beacon(&mut self, now_ms: u64, asn: u64) -> Result<(), CoreError<E>> {
@@ -750,8 +770,6 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::vec;
-
     use ieee802154::mac::*;
     use radio::{BasicInfo, mock::*};
     
@@ -867,7 +885,6 @@ mod test {
             pending_address: PendingAddress::new(),
         };
         let beacon = Packet::beacon(coord_addr, seq, beacon_info);
-        seq += 1;
 
         radio.expect(&[
             Transaction::check_receive(true, Ok(true)),
@@ -935,7 +952,6 @@ mod test {
             pending_address: PendingAddress::new(),
         };
         let beacon = Packet::beacon(coord_addr, seq, beacon_info);
-        seq += 1;
 
         radio.expect(&[
             Transaction::check_receive(true, Ok(true)),

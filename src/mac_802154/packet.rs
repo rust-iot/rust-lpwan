@@ -11,6 +11,7 @@ pub const MAX_PAYLOAD_LEN: usize = 256;
 /// Packet object represents an IEEE 802.15.4 object with owned storage.
 /// 
 /// Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html
+/// altered for static / owned storage via heapless
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Packet {
@@ -18,6 +19,7 @@ pub struct Packet {
 
     pub content: FrameContent,
 
+    // TODO: replace with const generic version when available in heapless
     payload: Vec<u8, U256>,
 
     pub footer: [u8; 2],

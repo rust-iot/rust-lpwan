@@ -2,19 +2,15 @@
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use std::time::{Instant, SystemTime};
-use std::collections::{HashMap, hash_map::Entry};
-use std::convert::TryFrom;
+use std::time::Instant;
 
-use log::{debug, info, warn, error};
+use log::{debug, info, error};
 
 use structopt::StructOpt;
-use humantime::Duration;
 
 use embedded_hal::blocking::delay::DelayMs;
 use driver_pal::hal::{HalInst, HalDelay, DeviceConfig};
 
-use radio::blocking::*;
 use radio_sx128x::prelude::*;
 use radio_sx128x::{Config as Sx128xConfig};
 
@@ -113,7 +109,7 @@ fn main() -> anyhow::Result<()> {
 
     // Initialise network stack
     let address = ExtendedAddress(rand::random::<u64>() % 1000);
-    let mut mac_config = MacConfig {
+    let mac_config = mac_802154::Config {
         pan_coordinator: opts.coordinator,
         ..Default::default()
     };
@@ -121,7 +117,7 @@ fn main() -> anyhow::Result<()> {
     debug!("Initialising MAC");
 
     let timer = SystemTimer::new();
-    let mut mac = match Mac::new(address, mac_config, radio, timer.clone()) {
+    let mut mac = match mac_802154::Mac::new(address, mac_config, radio, timer.clone()) {
         Ok(m) => m,
         Err(e) => {
             return Err(anyhow::anyhow!("Error initalising MAC: {:?}", e));

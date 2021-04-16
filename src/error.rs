@@ -1,18 +1,17 @@
 
-use crate::packet::Packet;
 use ieee802154::mac::DecodeError;
 
 /// Basic MAC errors
 #[derive(Debug, Clone, PartialEq)]
 pub enum CoreError<E> {
     /// Buffer full
-    BufferFull(Packet),
+    BufferFull,
 
     /// Transmission buffer full
     TransmitPending,
 
     /// Transmission failed
-    TransmitFailed(Packet),
+    TransmitFailed,
 
     /// Decoding error
     DecodeError(DecodeError),

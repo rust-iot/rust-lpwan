@@ -189,9 +189,7 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-
     use radio::{BasicInfo, mock::*};
-    use crate::timer::mock::MockTimer;
 
     #[test]
     fn init() {
@@ -217,6 +215,7 @@ mod test {
             Transaction::start_receive(None),
         ]);
         base.receive(ts).unwrap();
+        ts += 1;
 
         // No RX yet
         radio.expect(&[
@@ -224,6 +223,7 @@ mod test {
         ]);
         base.tick(ts).unwrap();
         assert_eq!(base.state(), BaseState::Listening);
+        ts += 1;
 
         // RX packet
         radio.expect(&[
@@ -235,6 +235,7 @@ mod test {
 
         // Return to listening state
         assert_eq!(base.state(), BaseState::Listening);
+        assert_eq!(rx.is_some(), true);
 
         radio.done();
     }
@@ -252,6 +253,7 @@ mod test {
             Transaction::start_transmit(std::vec![00, 11, 22], None),
         ]);
         base.transmit(ts, &[00, 11, 22]).unwrap();
+        ts += 1;
 
         // TX not yet complete
         radio.expect(&[
@@ -259,13 +261,14 @@ mod test {
         ]);
         base.tick(ts).unwrap();
         assert_eq!(base.state(), BaseState::Transmitting);
+        ts += 1;
 
         // RX packet
         radio.expect(&[
             Transaction::check_transmit(Ok(true)),
             Transaction::start_receive(None),
         ]);
-        let rx = base.tick(ts).unwrap();
+        let _rx = base.tick(ts).unwrap();
 
         // Return to listening state
         assert_eq!(base.state(), BaseState::Listening);
