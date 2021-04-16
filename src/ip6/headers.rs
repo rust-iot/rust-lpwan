@@ -1,15 +1,84 @@
 
 use byteorder::{ByteOrder, LittleEndian};
 
-use ieee802154::mac::{Address, DecodeError, ShortAddress, ExtendedAddress, PanId};
+use ieee802154::mac::{Address, DecodeError, ExtendedAddress, PanId, ShortAddress};
 
 
 // https://tools.ietf.org/html/rfc4944#page-3
 
-pub struct Dispatch {
-
+#[derive(Clone, PartialEq, Debug)]
+pub struct Header {
+    pub mesh: Option<MeshHeader>,
+    pub bcast: Option<BroadcastHeader>,
+    pub frag: Option<FragHeader>,
 }
 
+impl Default for Header {
+    fn default() -> Self {
+        Self {
+            mesh: None,
+            bcast: None,
+            frag: None,
+        }
+    }
+}
+
+impl Header {
+    pub fn decode(buff: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let mut offset = 0;
+
+        // Skip non-lowpan packets
+        if buff[0] & HEADER_TYPE_MASK == HeaderType::Nalp as u8 {
+            return Ok((Header::default(), 0));
+        }
+
+        // Parse out mesh headers
+        let mesh = if buff[offset] & HEADER_TYPE_MASK == HeaderType::Mesh as u8 {
+            let (m, n) = MeshHeader::decode(&buff[offset..])?;
+            offset += n;
+            Some(m)
+        } else {
+            None
+        };
+        
+        // TODO: deocde BC0 broadcast header
+        let bcast = None;
+
+        // Parse fragmentation header
+        let frag = if buff[offset] & HEADER_TYPE_MASK == HeaderType::Frag as u8 {
+            let (m, n) = FragHeader::decode(&buff[offset..])?;
+            offset += n;
+            Some(m)
+        } else {
+            None
+        };
+
+        // TODO: parse out IPv6 uncompressed header
+        // TODO: parse out IPv6 HC1 compressed header
+
+        Ok(( Self{ mesh, bcast, frag }, offset ))
+    }
+
+    pub fn encode(&self, buff: &mut[u8]) -> usize {
+        let mut offset = 0;
+
+        if let Some(mesh) = &self.mesh {
+            offset += mesh.encode(&mut buff[offset..]);
+        }
+
+        if let Some(_bcast) = &self.bcast {
+            // TODO: encode BC0 broadcast header
+        }
+
+        if let Some(frag) = &self.frag {
+            offset += frag.encode(&mut buff[offset..]);
+        }
+
+        offset
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum HeaderType {
     /// Not a LoWPAN Frame (discard packet)
     Nalp = 0b0000_0000,
@@ -21,10 +90,12 @@ pub enum HeaderType {
     Frag = 0b0000_0011,
 }
 
-const HEADER_TYPE_MASK: u8 = 0b0000_0011;
+pub const HEADER_TYPE_MASK: u8 = 0b0000_0011;
+pub const HEADER_DISPATCH_MASK: u8 = 0b1111_1100;
 
 /// Dispatch types per [RFC4449 Section 5.1](https://tools.ietf.org/html/rfc4944#section-5.1)
 // TODO: shit are these all backwards?!
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum DispatchBits {
     /// Not a LoWPAN Frame (discard packet)
     Nalp = 0b0000_0000,
@@ -44,28 +115,17 @@ pub enum DispatchBits {
     FragN = 0b1110_0000
 }
 
-pub enum DispatchType {
-    Nalp(u8),
-    Ipv6,
-    Hc1,
-    Bc0,
-    Esc,
-    Mesh(u8),
-    Frag1(u8),
-    FragN(u8),
-}
 
 const HEADER_MESH_SHORT_V: u8 = 0b0000_0010;
 const HEADER_MESH_SHORT_F: u8 = 0b0000_0100;
 
 /// Mesh header per [RFC4449 Section 5.2](https://tools.ietf.org/html/rfc4944#section-5.2)
+#[derive(Clone, PartialEq, Debug)]
 pub struct MeshHeader {
     pub hops_left: u8,
     pub origin_addr: Address,
     pub final_addr: Address,
 }
-
-
 
 impl MeshHeader {
     pub fn decode(buff: &[u8]) -> Result<(Self, usize), DecodeError> {
@@ -152,6 +212,13 @@ impl MeshHeader {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub struct BroadcastHeader {
+    
+}
+
+/// Fragmentation header per [rfc4944 Section 5.3](https://tools.ietf.org/html/rfc4944#section-5.3)
+#[derive(Clone, PartialEq, Debug)]
 pub struct FragHeader {
     /// IP packet size prior to link-layer fragmentation
     datagram_size: u16,
@@ -161,8 +228,11 @@ pub struct FragHeader {
     datagram_offset: Option<u8>,
 }
 
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum FragHeaderKind {
+    /// First fragment (no offset)
     Frag1 = 0b0000,
+    /// Following fragments (including offset)
     FragN = 0b0100,
 }
 
@@ -230,14 +300,33 @@ impl FragHeader {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct V6Addr(pub u64);
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct V6LLAddr(pub [u8; 16]);
 
+
 impl V6Addr {
+    /// Compute IPv6 Link-Local Address per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-7)
+    pub fn ll_addr(&self) -> V6LLAddr {
+        let mut buff = [0u8; 16];
+
+        let header = 0b1111111010;
+        LittleEndian::write_u64(&mut buff, header);
+        LittleEndian::write_u64(&mut buff[4..], self.0);
+
+        V6LLAddr(buff)
+    }
+}
+
+impl From<(PanId, ShortAddress)> for V6Addr {
     /// Create a new IPv6 Link-Local Address from an 802.15.4 pan_id and short address
     /// Per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-6)
-    pub fn from_short(pan_id: PanId, short_addr: ShortAddress) -> V6Addr {
+    fn from(a: (PanId, ShortAddress)) -> Self {
+        let pan_id = a.0;
+        let short_addr = a.1;
+
         V6Addr(
             u64::from_le_bytes([
                 0, 0,
@@ -249,10 +338,13 @@ impl V6Addr {
             ])
         )
     }
+}
 
+
+impl From<ExtendedAddress> for V6Addr {
     /// Create a new IPv6 Link-Local address from an 802.15.4 Extended address
     /// Per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-6), [RFC2464 Section 4](https://tools.ietf.org/html/rfc2464)
-    pub fn from_extended(extended: ExtendedAddress) -> V6Addr {
+    fn from(extended: ExtendedAddress) -> Self {
         V6Addr(
             // TODO: dropping the top extended address bits, is this correct?
             u64::from_le_bytes([
@@ -266,10 +358,14 @@ impl V6Addr {
             ])
         )
     }
+}
 
+
+impl From<[u8; 6]> for V6Addr {
     /// Create a new IPv6 Link-Local address from a MAC address
-    /// Per [RFC2464 Section 4](https://tools.ietf.org/html/rfc2464)
-    pub fn from_mac(mac: [u8; 6]) -> V6Addr {
+    /// Per [RFC2464 Section 4](https://tools.ietf.org/html/rfc2464
+
+    fn from(mac: [u8; 6]) -> Self {
         V6Addr(
             u64::from_le_bytes([
                 mac[0] ^ 0b10,  // Complement universal/local bit
@@ -282,18 +378,8 @@ impl V6Addr {
             ])
         )
     }
-
-    /// Compute IPv6 Link-Local Address per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-7)
-    pub fn ll_addr(&self) -> V6LLAddr {
-        let mut buff = [0u8; 16];
-
-        let header = 0b1111111010;
-        LittleEndian::write_u64(&mut buff, header);
-        LittleEndian::write_u64(&mut buff[4..], self.0);
-
-        V6LLAddr(buff)
-    }
 }
+
 
 // TODO: [unicast address mapping](https://tools.ietf.org/html/rfc4944#section-8)
 
