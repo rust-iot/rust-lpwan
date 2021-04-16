@@ -5,10 +5,10 @@ use smoltcp::{phy, time::Instant};
 use log::info;
 
 use crate::Mac;
-use super::Idk;
+use super::SixLo;
 
 // TODO: how to implement smolctp device on top of 6lo + 802.15.4?
-impl <'a, M, E> phy::Device<'a> for Idk<M, E>
+impl <'a, M, E> phy::Device<'a> for SixLo<M, E>
 where
     M: Mac<E>,
     E: core::fmt::Debug,

@@ -16,11 +16,12 @@ use self::headers::V6Addr;
 
 const IPV6_MTU: usize = 1280;
 
+const MAX_FRAG_SIZE: usize = 64;
 
 /// 6LoWPAN Implementation, provides IP compatible interface to higher-layers.
 /// This includes IPv6 addressing, header compression, fragmentation, 
 /// and neighbour discovery and management
-pub struct Idk<M, E> {
+pub struct SixLo<M, E> {
     mac: M,
     _mac_err: PhantomData<E>,
 
@@ -33,12 +34,15 @@ pub struct Idk<M, E> {
     rx_buff: [u8; IPV6_MTU],
 }
 
+pub struct SixLoConfig {
+
+}
+
 // TODO: is it important to be able to receive more than one fragmented packet at once?
 // seems... probable, in which case more buffers / a pooled approach might be better.
 
-// Minimal Fragment Forwarding seems like a _better_ approach than the basic one
+// Maybe useful to be able to support Minimal Fragment Forwarding / other improved approaches?
 // https://tools.ietf.org/html/draft-ietf-6lo-minimal-fragment-01
-// Maybe useful to be able to support both?
 
 
 #[derive(Clone, PartialEq, Debug)]
@@ -59,9 +63,19 @@ pub enum FragRxState {
 #[derive(Clone, PartialEq, Debug)]
 pub enum FragTxState {
     None,
+    Sending {
+        header: Header,
+
+        tag: u16,
+        size: u16,
+
+        index: usize,
+
+        timeout: u32,
+    }
 }
 
-impl <M, E> Idk<M, E> 
+impl <M, E> SixLo<M, E> 
 where
     M: Mac<E>,
     E: core::fmt::Debug,
@@ -81,6 +95,10 @@ where
         }
     }
 
+    pub fn tick(&mut self) -> Result<(), ()> {
+        unimplemented!()
+    }
+
     pub fn transmit(&mut self, _to: (), data: &[u8]) -> Result<(), ()> {
         if self.frag_tx_state != FragTxState::None {
             // Return busy
@@ -90,7 +108,7 @@ where
 
         // Fragement if required
         // TODO: configure this somewhere
-        if data.len() < 80 {
+        if data.len() < MAX_FRAG_SIZE {
 
         } else {
 
