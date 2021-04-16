@@ -107,6 +107,33 @@ pub enum AckState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum MacEvent {
+
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MacStats {
+    pub deadline_miss_tx: u32,
+    pub deadline_miss_ack: u32,
+    pub csma_cca_fail: u32,
+    pub tx_fail: u32,
+    pub sync_fail: u32,
+}
+
+impl MacStats  {
+    pub fn new() -> Self {
+        Self {
+            deadline_miss_tx: 0,
+            deadline_miss_ack: 0,
+            csma_cca_fail: 0,
+            tx_fail: 0,
+            sync_fail: 0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Mac<R, S, I, E, T> {
     pub address: ExtendedAddress,
     pub short_addr: Option<ShortAddress>,
@@ -126,6 +153,8 @@ pub struct Mac<R, S, I, E, T> {
     assoc_state: AssocState,
     csma_state: CsmaState,
     ack_state: AckState,
+
+    stats: MacStats,
 
     rx_buff: Queue<(RxInfo, Packet), U16>,
     tx_buff: Queue<(TxState, Packet), U16>,
@@ -160,6 +189,8 @@ where
             assoc_state: AssocState::Unassociated,
             csma_state: CsmaState::None,
             ack_state: AckState::None,
+
+            stats: MacStats::new(),
 
             rx_buff: Queue::new(),
             tx_buff: Queue::new(),
@@ -266,6 +297,7 @@ where
             AckState::Pending{packet, tx_time} if tx_time < now_ms => {
                 if now_ms > (tx_time + self.config.mac_deadline as u64) {
                     warn!("ACK deadline exceeded (expected: {} actual: {})", tx_time, now_ms);
+                    self.stats.deadline_miss_ack = self.stats.deadline_miss_ack.saturating_add(1);
                 }
 
                 debug!("Sending ACK for packet {} from {:?} at {} ms", packet.header.seq, packet.header.destination, now_ms);
@@ -327,6 +359,7 @@ where
             // Drop association on de-sync?
             // TODO: do we want to do this or, attempt to re-sync first?
             (SyncState::Unsynced, AssocState::Associated(_pan_id)) if last_sync_state != SyncState::Unsynced => {
+                self.stats.sync_fail = self.stats.sync_fail.saturating_add(1);
                 self.assoc_state = AssocState::Unassociated;
             }
             _ => (),
@@ -363,6 +396,11 @@ where
         let s = self.seq;
         self.seq = self.seq.wrapping_add(1);
         s
+    }
+
+    /// Fetch MAC layer statistics
+    pub fn stats(&self) -> MacStats {
+        self.stats.clone()
     }
 
     fn tick_beacon(&mut self, now_ms: u64, asn: u64) -> Result<(), CoreError<E>> {
@@ -451,6 +489,7 @@ where
                 // Limit CSMA backoff retries
                 if *retries >= self.config.csma_max_backoffs as u64 {
                     warn!("CSMA TX failed for packet {}", packet.header.seq);
+                    self.stats.csma_cca_fail = self.stats.csma_cca_fail.saturating_add(1);
 
                     // TODO: should _mac_ ACK/Retry cause CSMA re-attempts?
 
@@ -479,7 +518,9 @@ where
 
                 // Check TX retries and increase counter
                 if tx.0.retries > self.config.max_retries {
-                    debug!("Packet TX failed, {} exceeded max retries", tx.1.header.seq);
+                    debug!("Packet {} TX failed exceeded max retries", tx.1.header.seq);
+                    self.stats.tx_fail = self.stats.tx_fail.saturating_add(1);
+
                     let _ = self.tx_buff.dequeue();
                     return Ok(())
                 }
@@ -542,6 +583,7 @@ where
 
             } else if tx_slot != 0 && asn > tx_slot {
                 warn!("CSMA TX slot miss");
+                self.stats.deadline_miss_tx = self.stats.deadline_miss_tx.saturating_add(1);
 
                 self.csma_state = CsmaState::Pending{
                     packet: packet.clone(),
