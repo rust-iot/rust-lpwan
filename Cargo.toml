@@ -11,7 +11,7 @@ license = "MPL-2.0"
 [features]
 std = [ "rand-facade/os_rng", "bytes/std" ]
 mocks = []
-default = [ "std" ]
+default = [ "std", "smoltcp" ]
 
 [dependencies]
 radio = "0.9.0"
@@ -22,6 +22,12 @@ rand_core = "0.5.1"
 bytes = { version = "1.0.1", default-features = false }
 defmt = { version = "0.2.1", optional = true }
 byteorder = "1.4.3"
+
+[dependencies.smoltcp]
+version = "0.7.1"
+features = [ "proto-ipv6" ]
+default-features = false
+optional = true
 
 [dependencies.rand-facade]
 version = "0.2.0"

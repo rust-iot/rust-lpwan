@@ -58,7 +58,7 @@ pub struct RxInfo<Address=ieee802154::mac::Address> {
     pub rssi: i16,
 }
 
-/// Radio interface combines base `radio` traits
+/// Radio interface combines base [`radio`] traits
 pub trait Radio<S: radio::RadioState, I: radio::ReceiveInfo, E: Debug>: radio::State<State=S, Error=E> + radio::Busy<Error=E> + radio::Transmit<Error=E> + radio::Receive<Info=I, Error=E> + radio::Rssi<Error=E> {}
 
 /// Automatic Radio impl for radio devices meeting the trait constraint
@@ -68,6 +68,11 @@ impl <T, S: radio::RadioState, I: ReceiveInfo, E: Debug> Radio<S, I, E> for T wh
 
 
 /// MAC layer interface abstraction
+///
+/// The MAC layer interface is tick-based and split from other layers as
+/// MAC operations are often timing sensitive or critical. 
+/// Packets are internally buffered with [`Mac::transmit`] and [`Mac::receive`] functions
+/// to push data for transmission and poll for received data respectively.
 pub trait Mac<Address=ieee802154::mac::Address> {
     type Error;
 
