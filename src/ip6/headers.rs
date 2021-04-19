@@ -221,11 +221,11 @@ pub struct BroadcastHeader {
 #[derive(Clone, PartialEq, Debug)]
 pub struct FragHeader {
     /// IP packet size prior to link-layer fragmentation
-    datagram_size: u16,
+    pub datagram_size: u16,
     /// Tag to correlated datagram fragments
-    datagram_tag: u16,
+    pub datagram_tag: u16,
     /// Offset for fragment, only present in N>0 fragments
-    datagram_offset: Option<u8>,
+    pub datagram_offset: Option<u8>,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
