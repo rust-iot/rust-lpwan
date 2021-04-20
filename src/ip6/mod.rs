@@ -31,8 +31,8 @@ pub struct SixLo<M, E> {
     addr: V6Addr,
     frag_tag: u16,
 
-    tx_buffs: [FragTxBuffer<MAX_FRAG_SIZE>; 4],
-    rx_buffs: [FragRxBuffer; 4],
+    tx_buffs: [FragBuffer<MAX_FRAG_SIZE>; 4],
+    rx_buffs: [FragBuffer<MAX_FRAG_SIZE>; 4],
 }
 
 pub struct SixLoConfig {
@@ -82,12 +82,12 @@ where
                 n += l;
 
                 // Transmit fragment
-                self.mac.transmit(b.dest, &buff[..n], true).map_err(SixLoError::Mac)?;
+                self.mac.transmit(b.addr, &buff[..n], true).map_err(SixLoError::Mac)?;
             }
 
-            if b.state == FragTxState::Done {
+            if b.state == FragState::Done {
                 debug!("Completed TX for fragment {}", b.tag);
-                b.state = FragTxState::None;
+                b.state = FragState::None;
             }
         }
 
@@ -122,7 +122,7 @@ where
 
         } else {
             // Find an empty TX fragment buffer
-            let slot = match self.tx_buffs.iter_mut().find(|buff| buff.state == FragTxState::None) {
+            let slot = match self.tx_buffs.iter_mut().find(|buff| buff.state == FragState::None) {
                 Some(s) => s,
                 None => {
                     return Err(SixLoError::NoTxFragSlots);
@@ -138,7 +138,7 @@ where
             self.frag_tag = self.frag_tag.wrapping_add(1);
             
             // Initialise outgoing fragment buffer
-            *slot = FragTxBuffer::init(dest, header, self.frag_tag, data);
+            *slot = FragBuffer::init_tx(dest, header, self.frag_tag, data);
             debug!("TX fragment slot {} byte dataframe", data.len());
         }
 
