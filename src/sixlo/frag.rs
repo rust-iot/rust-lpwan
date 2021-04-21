@@ -36,7 +36,9 @@ pub enum FragState {
 pub struct Frag<const MAX_FRAG_SIZE: usize> {
     config: FragConfig,
     tag: u16,
-    // TODO: this would be better as a queue so oldest datagrams are served first...
+    // TODO: it would be nice to use a queue to preserve ordering...
+    // unfortunately heapless::Queue doesn't have arbitrary remove
+    // and heapless::Vec can only remove_swap so we can't use those anyway
     buffs: [FragBuffer<[u8; IPV6_MTU], MAX_FRAG_SIZE>; 4],
 }
 
@@ -95,18 +97,18 @@ impl <const MAX_FRAG_SIZE: usize> Frag<MAX_FRAG_SIZE> {
         };
 
         // Find a matching fragment buffer
-        let slot_idx = self.buffs.iter().enumerate()
-            .find(|(_idx, buff)| {
+        let slot_idx = self.buffs.iter()
+            .enumerate()
+            .find(|(_i, buff)| {
                 buff.state == FragState::Rx && 
                 buff.addr == src &&
                 buff.tag == fh.datagram_tag
             })
-            .map(|(idx, _buff)| idx );
+            .map(|(i, _b)| i );
 
+        // Update the existing buffer
         if let Some(i) = slot_idx {
-            // Update existing fragment
             let s = &mut self.buffs[i];
-
             let done = s.update_rx(hdr, d);
 
             if done {
@@ -116,8 +118,8 @@ impl <const MAX_FRAG_SIZE: usize> Frag<MAX_FRAG_SIZE> {
                 return Ok(None)
             }
 
+        // Otherwise, setup a new buffer
         } else {
-            // Otherwise, find a new fragment slot
             let slot = match self.buffs.iter_mut().find(|buff| buff.state == FragState::None) {
                 Some(s) => s,
                 None => {
@@ -464,7 +466,7 @@ mod test {
     use super::*;
 
     use std::println;
-    use crate::ip6::headers::FragHeader;
+    use crate::sixlo::{DEFAULT_FRAG_SIZE, headers::FragHeader};
 
     const MAX_FRAG_SIZE: usize = 64;
 

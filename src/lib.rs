@@ -24,7 +24,7 @@ pub mod error;
 
 pub mod mac_802154;
 
-pub mod ip6;
+pub mod sixlo;
 
 pub mod prelude;
 
@@ -75,26 +75,21 @@ impl <T, S: radio::RadioState, I: ReceiveInfo, E: Debug> Radio<S, I, E> for T wh
 {}
 
 
-/// MAC layer interface abstraction
-///
-/// The MAC layer interface is tick-based and split from other layers as
-/// MAC operations are often timing sensitive or critical. 
-/// Packets are internally buffered with [`Mac::transmit`] and [`Mac::receive`] functions
-/// to push data for transmission and poll for received data respectively.
+/// Network interface abstraction
 pub trait Mac<Address=ieee802154::mac::Address> {
     type Error;
 
-    /// Periodic tick to poll / update MAC operation
+    /// Periodic tick to poll / update layer operation
     fn tick(&mut self) -> Result<(), Self::Error>;
 
-    /// Check if the MAC is busy
+    /// Check if the layer is busy, used for back-pressure
     fn busy(&mut self) -> Result<bool, Self::Error>;
 
-    /// Setup a packet for transmission, buffered by the MAC
+    /// Setup a packet for transmission, buffered by the implementer
     fn transmit(&mut self, dest: Address, data: &[u8], ack: bool) -> Result<(), Self::Error>;
 
-    /// Check for received packets, buffered by the MAC
-    fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo)>, Self::Error>;
+    /// Check for received packets, buffered by the implementer
+    fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo<Address>)>, Self::Error>;
 }
 
 // Wrap log macros to support switching between defmt and standard logging
