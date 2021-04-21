@@ -6,7 +6,7 @@
 use core::marker::PhantomData;
 
 use crate::{Mac, Ts};
-use crate::log::{debug, error};
+use crate::log::{debug, info, error};
 
 use ieee802154::mac::{Address as MacAddress, ShortAddress, ExtendedAddress};
 
@@ -14,7 +14,7 @@ use ieee802154::mac::{Address as MacAddress, ShortAddress, ExtendedAddress};
 pub mod smoltcp;
 
 pub mod headers;
-use headers::{Header, V6Addr};
+use headers::{Header, Eui64, V6Addr};
 
 pub mod frag;
 use frag::*;
@@ -64,18 +64,22 @@ where
     E: core::fmt::Debug,
 {
     /// Create a new 6LowPAN Stack
-    pub fn new<A: Into<V6Addr>>(mac: M, addr: A, cfg: SixLoConfig) -> Self {
+    pub fn new<A: Into<Eui64>>(mac: M, addr: A, cfg: SixLoConfig) -> Self {
         let frag = Frag::new(cfg.frag.clone());
 
-        Self {
+        let s = Self {
             cfg,
 
             mac,
             _mac_err: PhantomData,
 
-            addr: addr.into(),
+            addr: V6Addr::from(addr.into()),
             frag,
-        }
+        };
+
+        info!("Setup sixlo with address: {:?}", s.addr);
+
+        s
     }
 
     /// Tick to update the stack

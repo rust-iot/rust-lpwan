@@ -3,7 +3,7 @@
 // https://github.com/rust-iot/rust-lpwan
 // Copyright 2021 Ryan Kurte
 
-use byteorder::{ByteOrder, LittleEndian};
+use byteorder::{ByteOrder, LittleEndian, NetworkEndian};
 
 use ieee802154::mac::{Address, DecodeError, ExtendedAddress, PanId, ShortAddress};
 
@@ -328,36 +328,71 @@ impl FragHeader {
     }
 }
 
+
+
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct V6Addr(pub u64);
+pub struct V6Addr(pub [u8; 16]);
 
-#[derive(Clone, PartialEq, Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct V6LLAddr(pub [u8; 16]);
-
-
-impl V6Addr {
-    /// Compute IPv6 Link-Local Address per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-7)
-    pub fn ll_addr(&self) -> V6LLAddr {
+impl From<Eui64> for V6Addr {
+    /// Compute IPv6 Link-Local Address from EUI-64
+    /// per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-7)
+    fn from(eui: Eui64) -> V6Addr {
         let mut buff = [0u8; 16];
 
         let header = 0b1111111010;
         LittleEndian::write_u64(&mut buff, header);
-        LittleEndian::write_u64(&mut buff[4..], self.0);
+        LittleEndian::write_u64(&mut buff[4..], eui.0);
 
-        V6LLAddr(buff)
+        V6Addr(buff)
     }
 }
 
-impl From<(PanId, ShortAddress)> for V6Addr {
-    /// Create a new IPv6 Link-Local Address from an 802.15.4 pan_id and short address
+
+#[cfg(any(feature = "alloc", feature = "std"))]
+impl core::fmt::Display for V6Addr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let mut compress = false;
+
+        for i in 0..8 {
+            let o = u16::from_be_bytes([self.0[i], self.0[i+1]]);
+
+            match (o, compress) {
+                (0, false) if i < 7 => {
+                    compress = true;
+                    write!(f, ":")?;
+                },
+                (0, true) => (),
+                (_, true) => {
+                    compress = false;
+                    write!(f, ":{:04x}", o)?;
+                },
+                (_, false) if i == 0 => {
+                    write!(f, "{:04x}", o)?;
+                },
+                (_, false) => {
+                    write!(f, ":{:04x}", o)?;
+                }
+            }
+        }
+        
+        Ok(())
+    }
+}
+
+/// interface identifier
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Eui64(pub u64);
+
+impl From<(PanId, ShortAddress)> for Eui64 {
+    /// Create a new EUI-64 Interface Identifier from an 802.15.4 pan_id and short address
     /// Per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-6)
     fn from(a: (PanId, ShortAddress)) -> Self {
         let pan_id = a.0;
         let short_addr = a.1;
 
-        V6Addr(
+        Eui64(
             u64::from_le_bytes([
                 0, 0,
                 pan_id.0 as u8,
@@ -371,11 +406,11 @@ impl From<(PanId, ShortAddress)> for V6Addr {
 }
 
 
-impl From<ExtendedAddress> for V6Addr {
-    /// Create a new IPv6 Link-Local address from an 802.15.4 Extended address
+impl From<ExtendedAddress> for Eui64 {
+    /// Create a new EUI-64 Interface Identifier from an 802.15.4 Extended address
     /// Per [RFC4449 Section 7](https://tools.ietf.org/html/rfc4944#section-6), [RFC2464 Section 4](https://tools.ietf.org/html/rfc2464)
     fn from(extended: ExtendedAddress) -> Self {
-        V6Addr(
+        Eui64(
             // TODO: dropping the top extended address bits, is this correct?
             u64::from_le_bytes([
                 extended.0 as u8,
@@ -391,12 +426,11 @@ impl From<ExtendedAddress> for V6Addr {
 }
 
 
-impl From<[u8; 6]> for V6Addr {
-    /// Create a new IPv6 Link-Local address from a MAC address
+impl From<[u8; 6]> for Eui64 {
+    /// Create a new EUI-64 Interface Identifier from a MAC address
     /// Per [RFC2464 Section 4](https://tools.ietf.org/html/rfc2464
-
     fn from(mac: [u8; 6]) -> Self {
-        V6Addr(
+        Eui64(
             u64::from_le_bytes([
                 mac[0] ^ 0b10,  // Complement universal/local bit
                 mac[1],
@@ -424,6 +458,8 @@ impl From<[u8; 6]> for V6Addr {
 mod test {
     use super::*;
 
+    use std::string::ToString;
+
     #[test]
     fn frag_header() {
         let mut buff = [0u8; 128];
@@ -443,5 +479,11 @@ mod test {
         // Check objects match
         assert_eq!(fh, fh2);
         assert_eq!(n, n2);
+    }
+
+    #[test]
+    fn fmt_addr_v6() {
+        let addr = V6Addr::from(Eui64::from((PanId(16), ShortAddress(24))));
+        assert_eq!(addr.to_string(), "fa03:0300::0010:1000:0000");
     }
 }
