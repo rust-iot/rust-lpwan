@@ -8,6 +8,9 @@ use radio::{State, Busy, Transmit, Receive, Rssi, ReceiveInfo};
 #[cfg(any(test, feature="std"))]
 extern crate std;
 
+#[cfg(any(test, feature="alloc"))]
+extern crate alloc;
+
 pub mod timer;
 
 pub mod base;
@@ -79,9 +82,21 @@ pub trait Mac<Address=ieee802154::mac::Address> {
     /// Periodic tick to poll / update MAC operation
     fn tick(&mut self) -> Result<(), Self::Error>;
 
+    /// Check if the MAC is busy
+    fn busy(&mut self) -> Result<bool, Self::Error>;
+
     /// Setup a packet for transmission, buffered by the MAC
     fn transmit(&mut self, dest: Address, data: &[u8], ack: bool) -> Result<(), Self::Error>;
 
     /// Check for received packets, buffered by the MAC
     fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo)>, Self::Error>;
+}
+
+// Wrap log macros to support switching between defmt and standard logging
+mod log {
+    #[cfg(feature = "defmt")]
+    pub use defmt::{trace, debug, info, warn, error};
+
+    #[cfg(not(feature = "defmt"))]
+    pub use log::{trace, debug, info, warn, error};
 }

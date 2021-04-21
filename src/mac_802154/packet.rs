@@ -13,7 +13,9 @@ pub const MAX_PAYLOAD_LEN: usize = 256;
 /// Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html
 /// altered for static / owned storage via heapless
 #[derive(Clone, Debug)]
-#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+// TODO: disabled on heapless::Vec support in defmt
+// See: https://github.com/japaric/heapless/issues/171
+//#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Packet {
     pub header: Header,
 
@@ -47,6 +49,8 @@ impl Packet {
                 destination: Address::broadcast(&AddressMode::Short),
                 source: source,
                 seq: seq,
+                seq_no_suppress: false,
+                ie_present: false,
             },
             content: FrameContent::Beacon(beacon),
             payload: Vec::new(),
@@ -66,6 +70,8 @@ impl Packet {
                 destination: dest,
                 source: source,
                 seq: seq,
+                seq_no_suppress: false,
+                ie_present: false,
             },
             content: FrameContent::Command(command),
             payload: Vec::new(),
@@ -87,6 +93,8 @@ impl Packet {
                 destination: dest,
                 source: source,
                 seq: seq,
+                seq_no_suppress: false,
+                ie_present: false,
             },
             content: FrameContent::Data,
             payload,
@@ -107,6 +115,8 @@ impl Packet {
                 destination: request.header.source,
                 source: request.header.destination,
                 seq: request.header.seq,
+                seq_no_suppress: false,
+                ie_present: false,
             },
             content: FrameContent::Acknowledgement,
             payload: Vec::new(),

@@ -469,10 +469,10 @@ dependencies = [
 [[package]]
 name = "ieee802154"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af632b4000a49093d3612d43529b9847a45690168dbe1f0877b8535e0670d281"
+source = "git+https://github.com/ryankurte/rust-ieee802.15.4?branch=feature/802.15.4-2015#13d87eae9991c46a8f400bcf782731206a96d67b"
 dependencies = [
  "byteorder",
+ "defmt",
  "hash32",
  "hash32-derive",
 ]
@@ -577,6 +577,7 @@ dependencies = [
  "humantime",
  "ieee802154",
  "log",
+ "no-std-net",
  "radio",
  "radio-sx128x",
  "rand 0.8.3",
@@ -651,6 +652,12 @@ dependencies = [
  "cfg-if 1.0.0",
  "libc",
 ]
+
+[[package]]
+name = "no-std-net"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bcece43b12349917e096cddfa66107277f123e6c96a5aea78711dc601a47152"
 
 [[package]]
 name = "num-integer"

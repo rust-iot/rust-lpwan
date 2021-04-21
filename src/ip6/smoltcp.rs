@@ -2,7 +2,7 @@
 
 use smoltcp::{phy, time::Instant};
 
-use log::info;
+use crate::log::info;
 
 use crate::Mac;
 use super::SixLo;

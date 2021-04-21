@@ -7,6 +7,7 @@ use ieee802154::mac::{Address, DecodeError, ExtendedAddress, PanId, ShortAddress
 // https://tools.ietf.org/html/rfc4944#page-3
 
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Header {
     pub mesh: Option<MeshHeader>,
     pub bcast: Option<BroadcastHeader>,
@@ -24,6 +25,23 @@ impl Default for Header {
 }
 
 impl Header {
+    pub fn merge(&mut self, h: &Header) {
+        match (self.mesh.is_none(), &h.mesh) {
+            (true, Some(h)) => self.mesh = Some(h.clone()),
+            _ => (),
+        }
+
+        match (self.bcast.is_none(), &h.bcast) {
+            (true, Some(h)) => self.bcast = Some(h.clone()),
+            _ => (),
+        }
+
+        match (self.frag.is_none(), &h.frag) {
+            (true, Some(h)) => self.frag = Some(h.clone()),
+            _ => (),
+        }
+    }
+
     pub fn decode(buff: &[u8]) -> Result<(Self, usize), DecodeError> {
         let mut offset = 0;
 
@@ -79,6 +97,7 @@ impl Header {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum HeaderType {
     /// Not a LoWPAN Frame (discard packet)
     Nalp = 0b0000_0000,
@@ -96,6 +115,7 @@ pub const HEADER_DISPATCH_MASK: u8 = 0b1111_1100;
 /// Dispatch types per [RFC4449 Section 5.1](https://tools.ietf.org/html/rfc4944#section-5.1)
 // TODO: shit are these all backwards?!
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum DispatchBits {
     /// Not a LoWPAN Frame (discard packet)
     Nalp = 0b0000_0000,
@@ -121,6 +141,7 @@ const HEADER_MESH_SHORT_F: u8 = 0b0000_0100;
 
 /// Mesh header per [RFC4449 Section 5.2](https://tools.ietf.org/html/rfc4944#section-5.2)
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MeshHeader {
     pub hops_left: u8,
     pub origin_addr: Address,
@@ -213,12 +234,14 @@ impl MeshHeader {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct BroadcastHeader {
     
 }
 
 /// Fragmentation header per [rfc4944 Section 5.3](https://tools.ietf.org/html/rfc4944#section-5.3)
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct FragHeader {
     /// IP packet size prior to link-layer fragmentation
     pub datagram_size: u16,
@@ -229,6 +252,7 @@ pub struct FragHeader {
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum FragHeaderKind {
     /// First fragment (no offset)
     Frag1 = 0b0000,
@@ -247,7 +271,7 @@ impl FragHeader {
         }
 
         // Read datagram size
-        let datagram_size = (buff[0] as u16) << 5 & 0b111 | buff[1] as u16 >> 3;
+        let datagram_size = (buff[0] & 0b1110_0000) as u16 >> 5  | (buff[1] as u16) << 3;
         offset += 2;
 
         // Read datagram tag
@@ -277,8 +301,8 @@ impl FragHeader {
         // Write header type
         buff[0] = HeaderType::Frag as u8;
         // Write datagram size
-        buff[0] |= ((self.datagram_size & 0b0111) >> 5) as u8;
-        buff[1] |= (self.datagram_size << 5) as u8;
+        buff[0] |= ((self.datagram_size & 0b0000_0111) << 5) as u8;
+        buff[1] |= (self.datagram_size >> 3) as u8;
 
         offset += 2;
 
@@ -301,9 +325,11 @@ impl FragHeader {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct V6Addr(pub u64);
 
 #[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct V6LLAddr(pub [u8; 16]);
 
 
@@ -390,3 +416,28 @@ impl From<[u8; 6]> for V6Addr {
 
 // TODO: [IP Header Compression](https://tools.ietf.org/html/rfc6282)
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn frag_header() {
+        let mut buff = [0u8; 128];
+
+        let fh = FragHeader{
+            datagram_tag: 14,
+            datagram_size: 100,
+            datagram_offset: Some(8),
+        };
+
+        // Encode and decode header
+        let n = fh.encode(&mut buff);
+        let (fh2, n2) = FragHeader::decode(&buff[..n]).unwrap();
+
+        std::println!("Encoded: {:02x?}", &buff[..n]);
+
+        // Check objects match
+        assert_eq!(fh, fh2);
+        assert_eq!(n, n2);
+    }
+}

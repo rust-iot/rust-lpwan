@@ -9,19 +9,34 @@ edition = "2018"
 license = "MPL-2.0"
 
 [features]
+# Basic features
 std = [ "rand-facade/os_rng", "bytes/std" ]
+alloc = []
 mocks = []
+
+# Enable defmt logging
+log-defmt = [ "defmt", "ieee802154/defmt", "defmt-default" ]
+
+# Defmt log levels
+defmt-default = []
+defmt-trace = []
+defmt-debug = []
+defmt-info = []
+defmt-warn = []
+defmt-error = []
+
 default = [ "std", "smoltcp" ]
 
 [dependencies]
 radio = "0.9.0"
-ieee802154 = "0.3.0"
+ieee802154 = { version = "0.3.0" }
 log = "0.4.8"
 heapless = "0.5.5"
 rand_core = "0.5.1"
 bytes = { version = "1.0.1", default-features = false }
-defmt = { version = "0.2.1", optional = true }
 byteorder = "1.4.3"
+no-std-net = "0.5.0"
+defmt = { version = "0.2.1", optional = true }
 
 [dependencies.smoltcp]
 version = "0.7.1"
@@ -49,6 +64,5 @@ rand = "0.8.3"
 #radio = { path = "../rust-radio" }
 #radio-sx128x = { path = "../rust-radio-sx128x" }
 radio-sx128x = { git = "https://github.com/ryankurte/rust-radio-sx128x" }
-
-#ieee802154 = { path = "../rust-ieee802.15.4" }
+ieee802154 = { git = "https://github.com/ryankurte/rust-ieee802.15.4", branch = "feature/802.15.4-2015" }
 

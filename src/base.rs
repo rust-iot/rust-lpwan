@@ -1,7 +1,7 @@
 
 use core::{fmt::Debug, marker::PhantomData};
 
-use log::{trace, debug};
+use crate::log::{trace, debug};
 
 use crate::{Radio, RawPacket, error::CoreError};
 

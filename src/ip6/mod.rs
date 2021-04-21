@@ -1,11 +1,11 @@
 
-use core::marker::PhantomData;
+use core::{marker::PhantomData, task::Poll};
 
-use log::{debug};
+use crate::log::{debug, warn, error};
 
-use ieee802154::mac::{Header as MacHeader, Address as MacAddress};
+use ieee802154::mac::{Address as MacAddress, Header as MacHeader, ShortAddress, ExtendedAddress};
 
-use crate::Mac;
+use crate::{Mac, Ts};
 
 #[cfg(feature = "smoltcp")]
 pub mod smoltcp;
@@ -25,20 +25,29 @@ const MAX_FRAG_SIZE: usize = 64;
 /// This includes IPv6 addressing, header compression, fragmentation, 
 /// and neighbour discovery and management
 pub struct SixLo<M, E> {
+    cfg: SixLoConfig,
+
     mac: M,
     _mac_err: PhantomData<E>,
 
     addr: V6Addr,
-    frag_tag: u16,
-
-    tx_buffs: [FragBuffer<MAX_FRAG_SIZE>; 4],
-    rx_buffs: [FragBuffer<MAX_FRAG_SIZE>; 4],
+    frag: Frag<MAX_FRAG_SIZE>,
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct SixLoConfig {
-
+    pub frag: FragConfig,
 }
 
+impl Default for SixLoConfig {
+    fn default() -> Self {
+        Self{
+            frag: Default::default(),
+        }
+    }
+}
+
+#[derive(PartialEq, Debug)]
 pub enum SixLoError<M> {
     Mac(M),
     NoTxFragSlots,
@@ -50,112 +59,116 @@ where
     M: Mac<Error=E>,
     E: core::fmt::Debug,
 {
-    pub fn new<A: Into<V6Addr>>(mac: M, addr: A) -> Self {
+    /// Create a new 6LowPAN Stack
+    pub fn new<A: Into<V6Addr>>(mac: M, addr: A, cfg: SixLoConfig) -> Self {
+        let frag = Frag::new(cfg.frag.clone());
+
         Self {
+            cfg,
+
             mac,
             _mac_err: PhantomData,
 
             addr: addr.into(),
-            frag_tag: 0,
-            
-            tx_buffs: Default::default(),
-            rx_buffs: Default::default(),
+            frag,
         }
     }
 
+    /// Tick to update the stack
     pub fn tick(&mut self, now_ms: u64) -> Result<(), SixLoError<E>> {
         // TODO: configure max fragment / message size
         let mut buff = [0u8; 256];
 
-        // Check for outgoing fragments
-        for i in 0..self.tx_buffs.len() {
-            let b = &mut self.tx_buffs[i];
+        // Tick internal MAC
+        self.mac.tick().map_err(SixLoError::Mac)?;
+        let mac_busy = self.mac.busy().map_err(SixLoError::Mac)?;
 
-            // TODO: probably only send these periodically..?
-
-            // Fetch the next chunk to send
-            if let Some((h, o, l)) = b.next() {
-                // Encode header
-                let mut n = h.encode(&mut buff);
-                // Encode copy datagram fragment
-                &buff[n..n+l].copy_from_slice(&b.buff[o..o+l]);
-                n += l;
-
-                // Transmit fragment
-                self.mac.transmit(b.addr, &buff[..n], true).map_err(SixLoError::Mac)?;
-            }
-
-            if b.state == FragState::Done {
-                debug!("Completed TX for fragment {}", b.tag);
-                b.state = FragState::None;
-            }
+        // Check for (and handle) received packets from the MAC
+        if let Some((n, info)) = self.mac.receive(&mut buff).map_err(SixLoError::Mac)? {
+            self.receive(now_ms, info.source, &buff[..n])?;
         }
 
-        // Check for incoming fragments
-        for i in 0..self.rx_buffs.len() {
-            // TODO: timeout
+        // Update fragmentation layer
+        let opts = PollOptions {
+            can_tx: !mac_busy,
+            ..Default::default()
+        };
+        if let Some((a, h, d)) = self.frag.poll(now_ms, opts) {
+            let ack = match a {
+                MacAddress::Short(_, s) if s != ShortAddress::BROADCAST => true,
+                MacAddress::Extended(_, s) if s != ExtendedAddress::BROADCAST => true,
+                _ => false,
+            };
+
+            // Encode header + data
+            let mut n = h.encode(&mut buff);
+            &buff[n..n+d.len()].copy_from_slice(d);
+            n += d.len();
+
+            // Transmit fragment
+            self.mac.transmit(a, &buff[..n], ack).map_err(SixLoError::Mac)?;
         }
 
         Ok(())
     }
 
-    /// Transmit a datagram, transparently fragmenting this as required
-    pub fn transmit(&mut self, dest: MacAddress, data: &[u8]) -> Result<(), SixLoError<E>> {
+    /// Transmit a datagram, fragmenting this as required
+    pub fn transmit(&mut self, now_ms: Ts, dest: MacAddress, data: &[u8]) -> Result<(), SixLoError<E>> {
         // TODO: configure max fragment / message size
-        let mut buff = [0u8; 256];
+        let mut buff = [0u8; 127];
 
         // Write IPv6 headers
+        // TODO: actually set these headers
         let mut header = Header::default();
-        // TODO: actually set these up
         let mut n = header.encode(&mut buff);
 
-        // Fragement if required
+        let ack = match dest {
+            MacAddress::Short(_, s) if s != ShortAddress::BROADCAST => true,
+            MacAddress::Extended(_, s) if s != ExtendedAddress::BROADCAST => true,
+            _ => false,
+        };
+
+        // If we don't need to fragment, send directly
         if n + data.len() < buff.len() {
             // Copy data into TX buffer
             &buff[n..n+data.len()].copy_from_slice(data);
             n += data.len();
 
-            debug!("Immediate TX {} datagram bytes", data.len());
+            debug!("Immediate TX {} byte datagram", data.len());
 
             // Transmit directly
-            self.mac.transmit(dest, &buff[..n], true).map_err(SixLoError::Mac)?;
+            self.mac.transmit(dest, &buff[..n], ack).map_err(SixLoError::Mac)?;
 
+        // Otherwise, add the datagram to the fragmentation buffer
         } else {
-            // Find an empty TX fragment buffer
-            let slot = match self.tx_buffs.iter_mut().find(|buff| buff.state == FragState::None) {
-                Some(s) => s,
-                None => {
-                    return Err(SixLoError::NoTxFragSlots);
-                }
-            };
+            debug!("Fragmented TX {} byte datagram", data.len());
 
-            // Setup fragmentation header
-            header.frag = Some(FragHeader{
-                datagram_size: data.len() as u16,
-                datagram_tag: self.frag_tag,
-                datagram_offset: None,
-            });
-            self.frag_tag = self.frag_tag.wrapping_add(1);
-            
-            // Initialise outgoing fragment buffer
-            *slot = FragBuffer::init_tx(dest, header, self.frag_tag, data);
-            debug!("TX fragment slot {} byte dataframe", data.len());
+            if let Err(e) = self.frag.transmit(now_ms, dest, header, data) {
+                error!("Failed to add datagram to fragmentation buffer: {:?}", e);
+                return Err(e);
+            }
         }
 
         Ok(())
     }
 
-    pub fn handle_rx(&mut self, _mac_header: MacHeader, payload: &[u8]) -> Result<(), ()> {
+    /// Receive a 6LoWPAN packet, returning header and data on receipt
+    fn receive<'a>(&'a mut self, now_ms: Ts, source: MacAddress, data: &'a[u8]) -> Result<Option<(Header, &'a [u8])>, SixLoError<E>> {
         // Decode headers
-        let (h, _o) = Header::decode(&payload).unwrap();
+        let (hdr, offset) = Header::decode(&data).unwrap();
 
         // Handle fragmentation
-        if let Some(frag) = &h.frag {
-            // 
-
+        if let Some(frag) = &hdr.frag {
+            if let Some((h, d)) = self.frag.receive(now_ms, source, &hdr, &data[offset..])? {
+                debug!("Received {:?} from {:?}, {} bytes", h, source, d.len());
+                Ok(Some((h.clone(), d)))
+            } else {
+                Ok(None)
+            }
+        } else {
+            debug!("Received {:?} from {:?}, {} bytes", hdr, source, data.len() - offset);
+            Ok(Some((hdr, &data[offset..])))
         }
-
-        unimplemented!()
     }
 
 }

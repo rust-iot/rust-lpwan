@@ -11,4 +11,7 @@ pub use crate::base::{Base as MacBase, BaseState as MacBaseState};
 
 pub use crate::mac_802154;
 
+pub use crate::ip6::{SixLo, SixLoConfig, SixLoError};
+
 pub use ieee802154::mac::{Address as MacAddress, AddressMode, ShortAddress, ExtendedAddress};
+

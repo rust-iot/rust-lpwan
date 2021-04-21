@@ -16,7 +16,7 @@ use ieee802154::mac::command::{
 };
 
 
-use log::{trace, debug, info, warn, error};
+use crate::log::{trace, debug, info, warn, error};
 use heapless::{spsc::Queue, consts::U16};
 
 use rand_core::RngCore;
@@ -256,6 +256,16 @@ where
         Ok(Some((payload.len(), rx.0)))
     }
 
+    /// Check whether the MAC is busy
+    fn busy(&mut self) -> Result<bool, Self::Error> {
+        let b =self.csma_state != CsmaState::None
+            || self.ack_state != AckState::None
+            || !self.assoc_state.is_associated()
+            || self.tx_buff.capacity() == 0;
+
+        Ok(b)
+    }
+
     fn tick(&mut self) -> Result<(), Self::Error> {
         let now_ms = self.timer.ticks_ms();
         
@@ -439,7 +449,7 @@ where
         // TODO: as do other coordinators in their respective slots? need to tx and rx for these
         // TODO: is there still a randomness to this to avoid collisions if neighbors > slotframe count?
         if self.config.pan_coordinator {
-            debug!("Broadcasting beacon in ASN: {} at {}", asn, now_ms);
+            debug!("Broadcasting beacon in ASN: {} at {} ms", asn, now_ms);
 
             // TODO: beacon type varies with TSCH/non-tsch?
             let beacon = Beacon {
@@ -570,7 +580,7 @@ where
 
                 self.base.transmit(now_ms, &buff[..n])?;
 
-                debug!("CSMA TX at {}", now_ms);
+                debug!("CSMA TX at {} ms", now_ms);
 
                 // Update CSMA state and packet buffer
                 self.csma_state = CsmaState::None;

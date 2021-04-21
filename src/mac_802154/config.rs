@@ -84,7 +84,7 @@ impl Default for Config {
             min_be: 2,
             max_be: 5,
             csma_max_backoffs: 3,
-            channel_clear_threshold: -70,
+            channel_clear_threshold: -50,
         }
     }
 }
