@@ -1,3 +1,7 @@
+//! LPWAN Error Types
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 use ieee802154::mac::DecodeError;
 

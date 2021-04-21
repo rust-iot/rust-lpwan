@@ -1,4 +1,7 @@
-
+//! 802.15.4 MAC Example Application
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;

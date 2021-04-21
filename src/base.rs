@@ -1,4 +1,7 @@
-
+//! Radio base - manages radio states
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 use core::{fmt::Debug, marker::PhantomData};
 
 use crate::log::{trace, debug};

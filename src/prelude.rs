@@ -1,4 +1,7 @@
-
+//! LPWAN crate prelude
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 pub use crate::{Radio, RawPacket};
 

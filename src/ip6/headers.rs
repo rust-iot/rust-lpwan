@@ -1,3 +1,7 @@
+//! 6LoWPAN/IPv6 Headers
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 use byteorder::{ByteOrder, LittleEndian};
 

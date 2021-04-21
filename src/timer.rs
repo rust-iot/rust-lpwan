@@ -1,4 +1,7 @@
-
+//! LPWAN Timer API
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 /// Timer trait provides mechanisms for accessing monotonic times
 /// to assist with procotol implementations.

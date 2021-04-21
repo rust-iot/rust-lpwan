@@ -1,4 +1,7 @@
-
+//! 802.14.4 Channel Definitions
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 /// 2.4GHz channel
 pub struct Ch2450(u16);

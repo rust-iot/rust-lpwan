@@ -1,4 +1,7 @@
-
+//! 802.15.4 Packet Objects
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 use ieee802154::mac::*;
 use ieee802154::mac::{beacon::Beacon, command::Command};

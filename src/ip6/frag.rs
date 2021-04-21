@@ -1,5 +1,7 @@
-
-
+//! 6LoWPAN/IPv6 Fragmentation Layer
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 // TODO: is it important to be able to receive more than one fragmented packet at once?
 // seems... probable, in which case more buffers / a pooled approach might be better.
@@ -7,20 +9,15 @@
 // Maybe useful to be able to support Minimal Fragment Forwarding / other improved approaches?
 // https://tools.ietf.org/html/draft-ietf-6lo-minimal-fragment-01
 
-use core::{char::MAX, option::Iter};
-
-use crate::log::{debug, warn};
-
 use ieee802154::mac::{Address as MacAddress};
 
 use crate::Ts;
-use super::{Header, MAX_FRAG_SIZE, headers::FragHeader, SixLoError};
+use crate::log::{debug, warn};
 
 
+use super::{Header, headers::FragHeader, SixLoError, IPV6_MTU};
 
-pub const IPV6_MTU: usize = 1280;
 
-pub const DEFAULT_FRAG_SIZE: usize = 64;
 
 /// Fragmentation buffer state
 #[derive(Clone, PartialEq, Debug)]
@@ -329,7 +326,7 @@ impl <B: FragData, const MAX_FRAG: usize> FragBuffer<B, MAX_FRAG> {
 
     /// Compute the number of fragments for a configured buffer
     pub fn num_frags(&self) -> usize {
-        let mut num_frags = self.len / MAX_FRAG;
+        let num_frags = self.len / MAX_FRAG;
         if self.len % MAX_FRAG != 0 {
             num_frags + 1
         } else {

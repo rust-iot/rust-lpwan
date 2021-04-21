@@ -1,4 +1,7 @@
-
+//! 6LoWPAN/IPv6 smoltcp support
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 use smoltcp::{phy, time::Instant};
 

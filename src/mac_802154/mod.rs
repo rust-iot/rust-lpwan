@@ -1,4 +1,7 @@
-
+//! 802.15.4 MAC Implementation
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 use core::{fmt::Debug};
 

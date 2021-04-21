@@ -1,3 +1,8 @@
+//! Low-Power Wide Area Network (LPWAN) Library.
+//! (Intended to) provide a unified network stack for LPWAN use
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
 #![no_std]
 

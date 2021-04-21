@@ -1,25 +1,29 @@
+//! 6LoWPAN/IPv6 Implementation
+//
+// https://github.com/rust-iot/rust-lpwan
+// Copyright 2021 Ryan Kurte
 
-use core::{marker::PhantomData, task::Poll};
-
-use crate::log::{debug, warn, error};
-
-use ieee802154::mac::{Address as MacAddress, Header as MacHeader, ShortAddress, ExtendedAddress};
+use core::marker::PhantomData;
 
 use crate::{Mac, Ts};
+use crate::log::{debug, error};
+
+use ieee802154::mac::{Address as MacAddress, ShortAddress, ExtendedAddress};
 
 #[cfg(feature = "smoltcp")]
 pub mod smoltcp;
 
 pub mod headers;
-use headers::{FragHeader, Header, V6Addr};
+use headers::{Header, V6Addr};
 
 pub mod frag;
 use frag::*;
 
 
-const IPV6_MTU: usize = 1280;
+pub const IPV6_MTU: usize = 1280;
 
-const MAX_FRAG_SIZE: usize = 64;
+pub const DEFAULT_FRAG_SIZE: usize = 64;
+
 
 /// 6LoWPAN Implementation, provides IP compatible interface to higher-layers.
 /// This includes IPv6 addressing, header compression, fragmentation, 
@@ -31,7 +35,7 @@ pub struct SixLo<M, E> {
     _mac_err: PhantomData<E>,
 
     addr: V6Addr,
-    frag: Frag<MAX_FRAG_SIZE>,
+    frag: Frag<DEFAULT_FRAG_SIZE>,
 }
 
 #[derive(Clone, PartialEq, Debug)]
@@ -158,7 +162,7 @@ where
         let (hdr, offset) = Header::decode(&data).unwrap();
 
         // Handle fragmentation
-        if let Some(frag) = &hdr.frag {
+        if hdr.frag.is_some() {
             if let Some((h, d)) = self.frag.receive(now_ms, source, &hdr, &data[offset..])? {
                 debug!("Received {:?} from {:?}, {} bytes", h, source, d.len());
                 Ok(Some((h.clone(), d)))
