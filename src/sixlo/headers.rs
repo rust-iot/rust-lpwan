@@ -3,7 +3,7 @@
 // https://github.com/rust-iot/rust-lpwan
 // Copyright 2021 Ryan Kurte
 
-use byteorder::{ByteOrder, LittleEndian, NetworkEndian};
+use byteorder::{ByteOrder, LittleEndian};
 
 use ieee802154::mac::{Address, DecodeError, ExtendedAddress, PanId, ShortAddress};
 

@@ -131,7 +131,7 @@ fn main() -> anyhow::Result<()> {
     let sixlo_cfg = SixLoConfig{
         ..Default::default()
     };
-    let mut sixlo = SixLo::new(mac, address, sixlo_cfg);
+    let mut sixlo = SixLo::<_, _, 127>::new(mac, address, sixlo_cfg);
 
 
     debug!("Starting loop");
@@ -151,9 +151,8 @@ fn main() -> anyhow::Result<()> {
 
         // Check for RX'd packets
         let mut buff = [0u8; 256];
-        #[cfg(nope)]
-        match mac.receive(&mut buff) {
-            Ok(Some((n, _i))) => {
+        match sixlo.receive(now, &mut buff) {
+            Ok(Some((n, _h))) => {
                 info!("Received data: {:02x?}", &buff[..n]);
             },
             Err(e) => {

@@ -88,68 +88,92 @@ impl <const MAX_FRAG_SIZE: usize> Frag<MAX_FRAG_SIZE> {
         Ok(())
     }
 
-    /// Handle received fragments
-    pub fn receive<'a, E>(&'a mut self, now_ms: Ts, src: MacAddress, hdr: &Header, d: &[u8]) -> Result<Option<(&'a Header, &'a [u8])>, SixLoError<E>> {
-        // Extract fragment header
-        let fh = match &hdr.frag {
-            Some(fh) => fh,
-            None => unimplemented!(),
+    /// Add a buffer to tracking
+    fn push<E>(&mut self, fb: FragBuffer<[u8; IPV6_MTU], MAX_FRAG_SIZE>) -> Result<usize, SixLoError<E>> {
+        // Find empty slot
+        let slot = self.buffs.iter_mut()
+            .enumerate()
+            .find(|(_idx, buff)| buff.state == FragState::None);
+
+        if let Some((idx, slot)) = slot {
+            *slot = fb;
+            Ok(idx)
+        } else {
+            Err(SixLoError::NoTxFragSlots)
+        }
+    }
+
+    /// Remove a completed buffer
+    pub fn pop<'a>(&'a mut self) -> Option<(&'a Header, &'a[u8])> {
+        // Find completed slot
+        let slot = self.buffs.iter_mut()
+            .find(|buff| buff.state == FragState::Done);
+            
+        let slot = match slot {
+            Some(s) => s,
+            None => return None,
         };
 
+        // Clear slot state
+        slot.state = FragState::None;
+
+        // Return slot header / data
+        Some((&slot.header, slot.data()))
+    }
+
+    /// Handle received fragments
+    pub fn receive<E>(&mut self, now_ms: Ts, src: MacAddress, hdr: &Header, d: &[u8]) -> Result<(), SixLoError<E>> {
+
         // Find a matching fragment buffer
-        let slot_idx = self.buffs.iter()
-            .enumerate()
-            .find(|(_i, buff)| {
-                buff.state == FragState::Rx && 
-                buff.addr == src &&
-                buff.tag == fh.datagram_tag
-            })
-            .map(|(i, _b)| i );
+        let slot_idx = hdr.frag.as_ref().map(|fh| {
+            self.buffs.iter()
+                .enumerate()
+                .find(|(_i, buff)| {
+                    buff.state == FragState::Rx && 
+                    buff.addr == src &&
+                    buff.tag == fh.datagram_tag
+                })
+                .map(|(i, _b)| i )
+        }).flatten();
 
-        // Update the existing buffer
-        if let Some(i) = slot_idx {
-            let s = &mut self.buffs[i];
-            let done = s.update_rx(hdr, d);
+        match (&hdr.frag, slot_idx) {
+            // Create a new buffer if no match exists
+            (Some(_fh), None) => {
+                // Setup new receive buffer
+                let mut fb = FragBuffer::init_rx(src, hdr, d);
+                fb.timeout = now_ms + self.config.frag_rx_timeout_ms;
 
-            if done {
-                s.state = FragState::None;
-                return Ok(Some((&s.header, s.data())))
-            } else {
-                return Ok(None)
-            }
+                debug!("Fragment {} RX start", fb.tag);
 
-        // Otherwise, setup a new buffer
-        } else {
-            let slot = match self.buffs.iter_mut().find(|buff| buff.state == FragState::None) {
-                Some(s) => s,
-                None => {
-                    return Err(SixLoError::NoTxFragSlots);
+                self.push(fb)?;
+            },
+            // Update an existing buffer if found
+            (Some(_fh), Some(i)) => {
+                let s = &mut self.buffs[i];
+                let done = s.update_rx(hdr, d);
+
+                if done {
+                    debug!("Fragment {} RX complete", s.tag);
+                    // TODO: track completed fragment stats
+                    s.state = FragState::Done;
                 }
-            };
+            },
+            // Skip fragmentation if not required
+            (None, _) => {
+                let fb = FragBuffer::init_done(src, hdr, d);
 
-            // Initialise this for receiving
-            *slot = FragBuffer::init_rx(src, hdr, d);
-            slot.timeout = now_ms + self.config.frag_rx_timeout_ms;
-
-            Ok(None)
+                self.push(fb)?;
+            }
         }
+
+        Ok(())
     }
 
     /// Poll for outgoing messages
     pub fn poll<'a>(&'a mut self, now_ms: Ts, opts: PollOptions) -> Option<(MacAddress, Header, &'a[u8])> {
 
-        // Handle timeouts and completion
+        // Handle timeouts
         for i in 0..self.buffs.len() {
-            // TODO: not sure done should be here...
-            if self.buffs[i].state == FragState::Done {
-                debug!("Fragment {} TX complete", self.buffs[i].tag);
-
-                // TODO: signal / count datagram successes
-
-                self.buffs[i].state = FragState::None;
-                continue;
-            }
-
             if self.buffs[i].state == FragState::None {
                 continue;
             }
@@ -178,10 +202,10 @@ impl <const MAX_FRAG_SIZE: usize> Frag<MAX_FRAG_SIZE> {
                 continue;
             }
 
-            debug!("TX fragment {} offset {}", self.buffs[i].tag, self.buffs[i].offset);
-
             // Return fragment for TX
             if let Some((h, o, l)) = self.buffs[i].next() {
+                debug!("TX fragment {} offset {}", self.buffs[i].tag, self.buffs[i].offset);
+
                 return Some((self.buffs[i].addr, h, self.buffs[i].frag_data(o, l)))
             } else {
                 debug!("TX fragment {} complete", self.buffs[i].tag);
@@ -326,6 +350,26 @@ impl <B: FragData, const MAX_FRAG: usize> FragBuffer<B, MAX_FRAG> {
         s
     }
 
+    /// Initialise fragmentation buffer with received data
+    pub fn init_done(source: MacAddress, header: &Header, data: &[u8]) -> Self {
+        let buff = B::from_bytes(data);
+
+        let s = Self {
+            state: FragState::Done,
+            header: header.clone(),
+            addr: source,
+            tag: 0,
+            len: data.len(),
+            buff,
+            ..Default::default()
+        };
+
+        debug!("New RX fragment from: {:?} tag: {} ({} bytes, complete)", 
+                source, s.tag, s.len);
+
+        s
+    }
+
     /// Compute the number of fragments for a configured buffer
     pub fn num_frags(&self) -> usize {
         let num_frags = self.len / MAX_FRAG;
@@ -450,7 +494,9 @@ impl <B: FragData, const MAX_FRAG: usize> Iterator for FragBuffer<B, MAX_FRAG> {
 
         // Check for fragment completion
         if self.offset > self.len {
-            self.state = FragState::Done;
+            // TODO: not sure this is the right place to set _none_
+            // probably should have TxDone and RxDone options
+            self.state = FragState::None;
         }
 
         // Return fragment header / offset / data length
@@ -538,7 +584,7 @@ mod test {
     }
 
     #[test]
-    fn frag_manager() {
+    fn frag_buffer() {
         let _ = simplelog::SimpleLogger::init(log::LevelFilter::Debug, simplelog::Config::default());
 
         // Setup data to TX
@@ -562,11 +608,14 @@ mod test {
         };
         frag_mgr_a.transmit::<()>(now_ms, addr_b, h.clone(), &tx).unwrap();
 
-        // Poll for and receive fragments
+        // Poll for fragments to TX
         let mut frag_rx = false;
         while let Some((_a, h1, d1)) = frag_mgr_a.poll(now_ms, PollOptions::default()) {
+            // Receive fragments
+            frag_mgr_b.receive::<()>(now_ms, addr_a, &h1, d1).unwrap();
 
-            if let Some((h2, d2)) = frag_mgr_b.receive::<()>(now_ms, addr_a, &h1, d1).unwrap() {
+            // Poll for complete message
+            if let Some((h2, d2)) = frag_mgr_b.pop() {
                 // Check received data matches
                 assert_eq!(&h, h2);
                 assert_eq!(&tx, d2);
@@ -577,6 +626,46 @@ mod test {
         }
 
         assert!(frag_rx);
+    }
+
+    /// Test passthrough of packets that do not need to be fragmented
+    #[test]
+    fn frag_buffer_passthrough() {
+        let _ = simplelog::SimpleLogger::init(log::LevelFilter::Debug, simplelog::Config::default());
+
+        // Setup data to TX
+        let mut tx = [0u8; 20];
+        for i in 0..tx.len() {
+            tx[i] = i as u8;
+        }
+
+        // Setup fragment managers
+        let addr_a = MacAddress::Short(PanId(1), ShortAddress(1));
+        let addr_b = MacAddress::Short(PanId(1), ShortAddress(2));
+
+        let mut frag_mgr_a = Frag::<64>::new(FragConfig::default());
+        let mut frag_mgr_b = Frag::<64>::new(FragConfig::default());
+        
+        let mut now_ms = 0;
+
+        // Start datagram transmission
+        let h = Header{
+            ..Default::default()
+        };
+        frag_mgr_a.transmit::<()>(now_ms, addr_b, h.clone(), &tx).unwrap();
+
+        // Poll for fragments to TX
+        let (_a, h1, d1) = frag_mgr_a.poll(now_ms, PollOptions::default()).unwrap();
+
+        // Receive fragments
+        frag_mgr_b.receive::<()>(now_ms, addr_a, &h1, d1).unwrap();
+
+        // Poll for complete message
+        let (h2, d2) = frag_mgr_b.pop().unwrap();
+
+        // Check received data matches
+        assert_eq!(&h, h2);
+        assert_eq!(&tx, d2);
     }
 }
 

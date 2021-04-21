@@ -905,7 +905,7 @@ mod test {
         
         let mut radio = MockRadio::new(&[]);
         let mut timer = MockTimer::new();
-        let mut seq = 0;
+        let seq = 0;
 
         let mac_addr = ExtendedAddress(0xabcd);
         let mac_cfg = Config{
