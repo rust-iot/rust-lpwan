@@ -13,6 +13,7 @@ use ieee802154::mac::{Address, DecodeError, ExtendedAddress, PanId, ShortAddress
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct Header {
+    pub hc1: Option<Hc1Header>,
     pub mesh: Option<MeshHeader>,
     pub bcast: Option<BroadcastHeader>,
     pub frag: Option<FragHeader>,
@@ -21,6 +22,7 @@ pub struct Header {
 impl Default for Header {
     fn default() -> Self {
         Self {
+            hc1: None,
             mesh: None,
             bcast: None,
             frag: None,
@@ -42,6 +44,11 @@ impl Header {
 
         match (self.frag.is_none(), &h.frag) {
             (true, Some(h)) => self.frag = Some(h.clone()),
+            _ => (),
+        }
+
+        match (self.hc1.is_none(), &h.hc1) {
+            (true, Some(h)) => self.hc1 = Some(h.clone()),
             _ => (),
         }
     }
@@ -75,10 +82,19 @@ impl Header {
             None
         };
 
+        // Parse out HC1
+        let hc1 = if buff[offset] & HEADER_TYPE_MASK == HeaderType::Lowpan as u8 {
+            let (m, n) = Hc1Header::decode(&buff[offset..])?;
+            offset += n;
+            Some(m)
+        } else {
+            None
+        };
+
         // TODO: parse out IPv6 uncompressed header
         // TODO: parse out IPv6 HC1 compressed header
 
-        Ok(( Self{ mesh, bcast, frag }, offset ))
+        Ok(( Self{ hc1, mesh, bcast, frag }, offset ))
     }
 
     pub fn encode(&self, buff: &mut[u8]) -> usize {
@@ -96,6 +112,10 @@ impl Header {
             offset += frag.encode(&mut buff[offset..]);
         }
 
+        if let Some(hc1) = &self.hc1 {
+            offset += hc1.encode(&mut buff[offset..]);
+        }
+
         offset
     }
 }
@@ -109,7 +129,7 @@ pub enum HeaderType {
     Lowpan = 0b0000_0001,
     /// Mesh Headers
     Mesh = 0b0000_0010,
-    /// Fragtmentation headers
+    /// Fragmentation headers
     Frag = 0b0000_0011,
 }
 
@@ -139,6 +159,175 @@ pub enum DispatchBits {
     FragN = 0b1110_0000
 }
 
+/// IPHC Header
+/// https://tools.ietf.org/html/draft-ietf-6lowpan-hc-15
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct IphcHeader {
+    pub flags_0: IphcFlags0,
+    pub flags_1: IphcFlags1,
+}
+
+bitflags::bitflags!{
+    /// IPHC flags byte 1
+    /// https://tools.ietf.org/html/draft-ietf-6lowpan-hc-15#section-3.1.1
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct IphcFlags0: u8 {
+        /// Traffic Control / Flow Label - ECN + DSCP + 4-bit Pad + Flow Label (4 bytes)
+        const TCFL_FULL     = 0b0000_0000;
+        /// Traffic Control / Flow Label - ECN + 2-bit Pad + Flow Label (3 bytes), DSCP is elided
+        const TCFL_NO_DSCP  = 0b0000_1000;
+        /// Traffic Control / Flow Label - ECN + DSCP (1 byte), Flow Label is elided
+        const TCFL_NO_FL    = 0b0001_0000;
+        /// Traffic Control / Flow Label - Traffic Class and Flow Label are elided.
+        const TCFL_ELIDE    = 0b0001_1000;
+
+        /// Next header compressed and encoded via LOWPAN_NHC.
+        /// otherwise full 8 header bits are inline
+        const NEXT_HDR_COMPRESS = 0b0010_0000;
+
+        /// Hop limit compressed with limit of 1
+        const HOP_LIMIT1        = 0b0100_0000;
+        /// Hop limit compressed with limit of 64
+        const HOP_LIMIT64       = 0b1000_0000;
+        /// Hop limit compressed with limit of 255
+        const HOP_LIMIT255      = 0b1100_0000;
+
+        /// Base bits (from dispatch)
+        const BASE = 0b0000_0110;
+    }
+}
+
+bitflags::bitflags!{
+    /// IPHC flags byte 2
+    /// https://tools.ietf.org/html/draft-ietf-6lowpan-hc-15#section-3.1.1
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct IphcFlags1: u8 {
+        /// Additional 8-bit Context Identifier Extension field immediately follows the DAM field.
+        const CID_EXT     = 0b0000_0001;
+
+        /// Source Address Compression (SAC) uses stateful, context-based compression.
+        const SAC_STATEFULL = 0b0000_0010;
+
+        /// if SAC=0, 128 bit source address, carred inline
+        /// if SAC=1, UNSPECIFIED address `::`
+        const SAM_128BIT_UNSPEC = 0b0000_0000;
+        /// if SAC=0, 64 bit source address, first 64-bits of the address are elided.
+        /// if SAC=1, 64-bit source address, derived from context and 64 inline bits
+        const SAM_64BIT = 0b0000_0100;
+        /// if SAC=0, 16 bit source address, first 112-bits of the address are elided.
+        /// if SAC=1, 16-bit source address, derived from context and 16-bits inline
+        const SAM_16BIT = 0b0000_1000;
+        /// if SAC=0, 0 bit source address, computed from encapsulating header
+        /// if SAC=0, 0 bit source address, derived from context and encapsulating header
+        const SAM_0BIT  = 0b0000_1100;
+
+        /// Destination address is multicast address (M)
+        const MCAST_COMPRESS = 0b0001_0000;
+
+        /// Destination Address Compression (DAC) uses stateful, context-based compression.
+        const DAC_STATEFULL = 0b0010_0000;
+
+        /// if M=0 DAC=0, 128 bit destination address, carred inline
+        /// if M=0 DAC=1, reserved
+        /// if M=1 DAC=0, 128-bit destination address, carried inline
+        /// if M=1 DAC=1, 48-bit 48 bits designed to match Unicast-Prefix-based IPv6 Multicast Addresses
+        const DAM_FULL  = 0b0000_0000;
+        /// if M=0 DAC=0, 64 bit destination address, first 64-bits of the address are elided.
+        /// if DAC=1, 64-bit destination address, derived from context and 64 inline bits
+        /// if M=1 DAC=0, 48 bit destination address in the form FFXX::00XX:XXXX:XXXX
+        /// if M=1 DAC=1, reserved
+        const DAM_64BIT = 0b0100_0000;
+        /// if M=0 DAC=0, 16 bit destination address, first 112-bits of the address are elided.
+        /// if DAC=1, 16-bit source address, derived from context and 16-bits inline
+        /// if M=1 DAC=0, 32 bit destination address in the form FFXX::00XX:XXXX
+        /// if M=1 DAC=1, reserved
+        const DAM_16BIT = 0b1000_0000;
+        /// if M=0 DAC=0, 0 bit source address, computed from encapsulating header
+        /// if DAC=0, 0 bit source address, derived from context and encapsulating header
+        /// if M=1 DAC=0, 8 bit destination address in the form FF02::00XX
+        /// if M=1 DAC=1, reserved
+        const DAM_0BIT  = 0b1100_0000;
+    }
+}
+
+// TODO: complete IPHC encode/decode
+impl IphcHeader {
+    pub fn decode(buff: &[u8]) -> Result<(Self, usize), DecodeError> {
+        unimplemented!()
+    }
+
+    pub fn encode(&self, buff: &mut[u8]) -> usize {
+        unimplemented!()
+    }
+}
+
+/// IPv6 HC1 Header (wireshark doesn't seem to like this?)
+/// Per https://tools.ietf.org/html/rfc4944#section-10.1
+#[derive(Clone, PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct Hc1Header {
+    pub flags: Hc1Flags,
+    pub hop_limit: u8,
+}
+
+
+bitflags::bitflags!{
+    #[cfg_attr(feature = "defmt", derive(defmt::Format))]
+    pub struct Hc1Flags: u8 {
+        const SRC_IF_COMPRESS  = 0b0000_0001;
+        const SRC_PFX_COMPRESS = 0b0000_0010;
+        const DST_IF_COMPRESS  = 0b0000_0100;
+        const DST_PFX_COMPRESS = 0b0000_1000;
+        const TC_COMPRESS      = 0b0001_0000;
+        const NEXT_HDR_UDP     = 0b0010_0000;
+        const NEXT_HDR_ICMP    = 0b0100_0000;
+        const NEXT_HDR_TCP     = 0b0110_0000;
+        const HC2_EN           = 0b1000_0000;
+
+        const COMPRESS_ALL = Self::SRC_IF_COMPRESS.bits | Self::SRC_PFX_COMPRESS.bits 
+            | Self::DST_IF_COMPRESS.bits | Self::DST_PFX_COMPRESS.bits | Self::TC_COMPRESS.bits;
+    }
+}
+
+const HC1_PREFIX_INLINE: u8 = 0b10;
+const HC1_PREFIX_COMPRESSED: u8 = 0b10;
+
+const HC1_IFACE_INLINE: u8 = 0b00;
+const HC1_IFACE_COMPRESSED: u8 = 0b01;
+
+
+impl Hc1Header {
+    pub fn decode(buff: &[u8]) -> Result<(Self, usize), DecodeError> {
+        let mut offset = 0;
+
+        let flags = Hc1Flags::from_bits_truncate(buff[1]);
+        let hop_limit = buff[2];
+
+        Ok((
+            Self{ flags, hop_limit },
+            3
+        ))
+    }
+
+    pub fn encode(&self, buff: &mut[u8]) -> usize {
+        // Set header and dispatch for mesh HC1
+        buff[0] = HeaderType::Mesh as u8;
+        buff[0] |= DispatchBits::Hc1 as u8;
+
+        // TODO: Set HC1 flags
+        buff[1] = 0;
+        buff[1] |= Hc1Flags::COMPRESS_ALL.bits;
+
+        // Hop limit always written
+        buff[2] = self.hop_limit;
+
+        // TODO: encode other header components
+
+
+        return 3;
+    }
+}
 
 const HEADER_MESH_SHORT_V: u8 = 0b0000_0010;
 const HEADER_MESH_SHORT_F: u8 = 0b0000_0100;

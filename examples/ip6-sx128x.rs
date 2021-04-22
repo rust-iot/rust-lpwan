@@ -131,7 +131,7 @@ fn main() -> anyhow::Result<()> {
     let sixlo_cfg = SixLoConfig{
         ..Default::default()
     };
-    let mut sixlo = SixLo::<_, _, 127>::new(mac, address, sixlo_cfg);
+    let mut sixlo = SixLo::<_, _, 127>::new(mac, MacAddress::Extended(PanId(1), address), sixlo_cfg);
 
 
     debug!("Starting loop");

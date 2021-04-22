@@ -16,5 +16,5 @@ pub use crate::mac_802154;
 
 pub use crate::sixlo::{SixLo, SixLoConfig, SixLoError};
 
-pub use ieee802154::mac::{Address as MacAddress, AddressMode, ShortAddress, ExtendedAddress};
+pub use ieee802154::mac::{Address as MacAddress, PanId, AddressMode, ShortAddress, ExtendedAddress};
 

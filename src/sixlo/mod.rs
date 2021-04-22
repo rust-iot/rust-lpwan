@@ -19,6 +19,8 @@ use headers::{Header, Eui64, V6Addr};
 pub mod frag;
 use frag::*;
 
+use self::headers::MeshHeader;
+
 
 pub const IPV6_MTU: usize = 1280;
 
@@ -32,9 +34,12 @@ pub struct SixLo<M, E, const MAX_PAYLOAD: usize> {
     cfg: SixLoConfig,
 
     mac: M,
+    mac_addr: MacAddress,
     _mac_err: PhantomData<E>,
 
-    addr: V6Addr,
+    //eui64: Eui64,
+    //v6_addr: V6Addr,
+
     frag: Frag<DEFAULT_FRAG_SIZE>,
 }
 
@@ -63,7 +68,7 @@ where
     E: core::fmt::Debug,
 {
     /// Create a new 6LowPAN stack instance
-    pub fn new<A: Into<Eui64>>(mac: M, addr: A, cfg: SixLoConfig) -> Self {
+    pub fn new(mac: M, addr: MacAddress, cfg: SixLoConfig) -> Self {
         let frag = Frag::new(cfg.frag.clone());
 
         let s = Self {
@@ -71,12 +76,14 @@ where
 
             mac,
             _mac_err: PhantomData,
+            mac_addr: addr.clone(),
 
-            addr: V6Addr::from(addr.into()),
+            // TODO: v6 + EUI addrs? PAN IDs?
+            //v6_addr: V6Addr::from(addr.into()),
             frag,
         };
 
-        info!("Setup sixlo with address: {:?}", s.addr);
+        info!("Setup sixlo with address: {:?}", s.mac_addr);
 
         s
     }
@@ -116,7 +123,7 @@ where
             self.handle_rx(now_ms, info.source, &buff[..n])?;
         }
 
-        // Update fragmentation layer
+        // Poll fragmentation buffer for pending fragments
         let opts = PollOptions {
             can_tx: !mac_busy,
             ..Default::default()
@@ -147,6 +154,12 @@ where
         // Write IPv6 headers
         // TODO: actually set these headers
         let mut header = Header::default();
+        header.mesh = Some(MeshHeader{
+            final_addr: dest,
+            origin_addr: self.mac_addr,
+            hops_left: 7,
+        });
+
         let mut n = header.encode(&mut buff);
 
         let ack = match dest {
