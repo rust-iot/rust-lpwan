@@ -27,7 +27,6 @@ jobs:
           - name: Build with `defmt`
             cmd: build --no-default-features --features="log-defmt,rand-facade/os_rng,alloc"
 
-
     steps:
     - uses: actions/checkout@v2
     - uses: FranzDiebold/github-env-vars-action@v1.2.1
@@ -42,7 +41,6 @@ jobs:
     - name: Configure caching 
       uses: actions/cache@v2
       with:
-        key: ${{ matrix.cmd }}
         path: |
           ${{ env.HOME }}/.cargo
           target
