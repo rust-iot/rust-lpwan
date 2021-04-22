@@ -47,7 +47,7 @@ jobs:
           target
     
     - name: Install libusb
-      run: sudo apt install -y libusb-1.0 libusb-dev
+      run: sudo apt install -y libusb-dev
 
     - name: ${{ matrix.name }}
       uses: actions-rs/cargo@v1
