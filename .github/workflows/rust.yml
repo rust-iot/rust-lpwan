@@ -41,6 +41,7 @@ jobs:
     - name: Configure caching 
       uses: actions/cache@v2
       with:
+        key: build-cache
         path: |
           ${{ env.HOME }}/.cargo
           target
