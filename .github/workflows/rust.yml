@@ -1,0 +1,57 @@
+name: Rust
+
+on:
+  push:
+    branches: [ master ]
+    tags: [ 'v*' ]
+  pull_request:
+    branches: [ master ]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-test:
+    runs-on: x86_64-unknown-linux-gnu
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Run tests
+            cmd: test
+          - name: Build with `std`
+            cmd: build --no-default-features --features="std"
+          - name: Build with `no_std`
+            cmd: build --no-default-features --features="rand-facade/os_rng,alloc"
+          - name: Build with `defmt`
+            cmd: build --no-default-features --features="log-defmt,rand-facade/os_rng,alloc"
+
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: FranzDiebold/github-env-vars-action@v1.2.1
+      
+    - name: Configure toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: nightly
+        target:  ${{ matrix.target }}
+        override: true
+    
+    - name: Configure caching 
+      uses: actions/cache@v2
+      with:
+        key: ${{ matrix.cmd }}
+        path: |
+          ${{ env.HOME }}/.cargo
+          target
+    
+    - name: Install libusb
+      run: sudo apt install -y libusb-1.0 libusb-dev
+
+    - name: ${{ matrix.name }}
+      uses: actions-rs/cargo@v1
+      with:
+        command: ${{ matrix.cmd }}
+

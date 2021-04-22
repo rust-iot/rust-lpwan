@@ -6,7 +6,7 @@
 use core::marker::PhantomData;
 
 use crate::{Mac, Ts};
-use crate::log::{debug, info, error};
+use crate::log::{FmtError, debug, info, error};
 
 use ieee802154::mac::{Address as MacAddress, ShortAddress, ExtendedAddress};
 
@@ -57,15 +57,17 @@ impl Default for SixLoConfig {
 }
 
 #[derive(PartialEq, Debug)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SixLoError<M> {
     Mac(M),
     NoTxFragSlots,
 }
 
+
 impl <M, E, const MAX_PAYLOAD: usize> SixLo<M, E, MAX_PAYLOAD> 
 where
     M: Mac<Error=E>,
-    E: core::fmt::Debug,
+    E: FmtError,
 {
     /// Create a new 6LowPAN stack instance
     pub fn new(mac: M, addr: MacAddress, cfg: SixLoConfig) -> Self {
@@ -106,10 +108,8 @@ where
 impl <M, E, const MAX_PAYLOAD: usize> SixLo<M, E, MAX_PAYLOAD> 
 where
     M: Mac<Error=E>,
-    E: core::fmt::Debug,
+    E: FmtError,
 {
-
-
     /// Tick to update the stack
     pub fn tick(&mut self, now_ms: u64) -> Result<(), SixLoError<E>> {
         let mut buff = [0u8; MAX_PAYLOAD];
@@ -154,11 +154,16 @@ where
         // Write IPv6 headers
         // TODO: actually set these headers
         let mut header = Header::default();
-        header.mesh = Some(MeshHeader{
-            final_addr: dest,
-            origin_addr: self.mac_addr,
-            hops_left: 7,
-        });
+
+        #[cfg(nope)]
+        {
+            // Disabled while sorting out which headers are right / useful / required
+            header.mesh = Some(MeshHeader{
+                final_addr: dest,
+                origin_addr: self.mac_addr,
+                hops_left: 7,
+            });
+        }
 
         let mut n = header.encode(&mut buff);
 

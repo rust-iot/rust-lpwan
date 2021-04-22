@@ -290,12 +290,6 @@ bitflags::bitflags!{
     }
 }
 
-const HC1_PREFIX_INLINE: u8 = 0b10;
-const HC1_PREFIX_COMPRESSED: u8 = 0b10;
-
-const HC1_IFACE_INLINE: u8 = 0b00;
-const HC1_IFACE_COMPRESSED: u8 = 0b01;
-
 
 impl Hc1Header {
     pub fn decode(buff: &[u8]) -> Result<(Self, usize), DecodeError> {

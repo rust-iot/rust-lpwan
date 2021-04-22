@@ -81,7 +81,10 @@ where
         }
 
         debug!("Transmit {} bytes at {} ms", data.len(), now);
+        #[cfg(not(feature="defmt"))]
         trace!("{:02x?}", data);
+        #[cfg(feature="defmt")]
+        trace!("{:?}", data);
 
         // Start the transmission
         self.radio.start_transmit(&data).map_err(CoreError::Radio)?;
@@ -163,7 +166,10 @@ where
         pkt.rssi = info.rssi();
 
         debug!("Received {} bytes with RSSI {} at {} ms", pkt.len, info.rssi(), now);
+        #[cfg(not(feature="defmt"))]
         trace!("{:02x?}", pkt.data());
+        #[cfg(feature="defmt")]
+        trace!("{:?}", pkt.data());
 
         // Restart RX
         self.radio.start_receive().map_err(CoreError::Radio)?;

@@ -93,10 +93,19 @@ pub trait Mac<Address=ieee802154::mac::Address> {
 }
 
 // Wrap log macros to support switching between defmt and standard logging
+
+#[cfg(feature = "defmt")]
 mod log {
-    #[cfg(feature = "defmt")]
     pub use defmt::{trace, debug, info, warn, error};
 
-    #[cfg(not(feature = "defmt"))]
+    pub trait FmtError: core::fmt::Debug + defmt::Format {}
+    impl <T: core::fmt::Debug + defmt::Format> FmtError for T {}
+
+}
+#[cfg(not(feature = "defmt"))]
+mod log {
     pub use log::{trace, debug, info, warn, error};
+    
+    pub trait FmtError: core::fmt::Debug {}
+    impl <T: core::fmt::Debug> FmtError for T {}
 }
