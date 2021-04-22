@@ -21,11 +21,14 @@ jobs:
           - name: Run tests
             cmd: test
           - name: Build with `std`
-            cmd: build --no-default-features --features="std"
+            cmd: build
+            args: --no-default-features --features="std"
           - name: Build with `no_std`
-            cmd: build --no-default-features --features="rand-facade/os_rng,alloc"
+            cmd: build
+            args: --no-default-features --features="rand-facade/os_rng,alloc"
           - name: Build with `defmt`
-            cmd: build --no-default-features --features="log-defmt,rand-facade/os_rng,alloc"
+            cmd: build
+            args: --no-default-features --features="log-defmt,rand-facade/os_rng,alloc"
 
     steps:
     - uses: actions/checkout@v2
@@ -53,4 +56,5 @@ jobs:
       uses: actions-rs/cargo@v1
       with:
         command: ${{ matrix.cmd }}
+        args: ${{ matrix.args }}
 
