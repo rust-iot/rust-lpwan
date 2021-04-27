@@ -152,7 +152,7 @@ fn main() -> anyhow::Result<()> {
         // Check for RX'd packets
         let mut buff = [0u8; 256];
         match sixlo.receive(now, &mut buff) {
-            Ok(Some((n, _h))) => {
+            Ok(Some((n, _a, _h))) => {
                 info!("Received data: {:02x?}", &buff[..n]);
             },
             Err(e) => {

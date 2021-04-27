@@ -198,11 +198,11 @@ where
     }
 
     /// Receive a datagram, reassembled internally
-    pub fn receive(&mut self, now_ms: Ts, buff: &mut [u8]) -> Result<Option<(usize, Header)>, SixLoError<E>> {
-        if let Some((h, d)) = self.frag.pop() {
+    pub fn receive(&mut self, now_ms: Ts, buff: &mut [u8]) -> Result<Option<(usize, MacAddress, Header)>, SixLoError<E>> {
+        if let Some((a, h, d)) = self.frag.pop() {
             &mut buff[..d.len()].copy_from_slice(d);
 
-            Ok(Some((d.len(), h.clone())))
+            Ok(Some((d.len(), a.clone(), h.clone())))
         } else {
             Ok(None)
         }

@@ -104,7 +104,7 @@ impl <const MAX_FRAG_SIZE: usize> Frag<MAX_FRAG_SIZE> {
     }
 
     /// Remove a completed buffer
-    pub fn pop<'a>(&'a mut self) -> Option<(&'a Header, &'a[u8])> {
+    pub fn pop<'a>(&'a mut self) -> Option<(&'a MacAddress, &'a Header, &'a[u8])> {
         // Find completed slot
         let slot = self.buffs.iter_mut()
             .find(|buff| buff.state == FragState::Done);
@@ -118,7 +118,7 @@ impl <const MAX_FRAG_SIZE: usize> Frag<MAX_FRAG_SIZE> {
         slot.state = FragState::None;
 
         // Return slot header / data
-        Some((&slot.header, slot.data()))
+        Some((&slot.addr, &slot.header, slot.data()))
     }
 
     /// Handle received fragments
@@ -615,7 +615,7 @@ mod test {
             frag_mgr_b.receive::<()>(now_ms, addr_a, &h1, d1).unwrap();
 
             // Poll for complete message
-            if let Some((h2, d2)) = frag_mgr_b.pop() {
+            if let Some((_a, h2, d2)) = frag_mgr_b.pop() {
                 // Check received data matches
                 assert_eq!(&h, h2);
                 assert_eq!(&tx, d2);
@@ -661,7 +661,7 @@ mod test {
         frag_mgr_b.receive::<()>(now_ms, addr_a, &h1, d1).unwrap();
 
         // Poll for complete message
-        let (h2, d2) = frag_mgr_b.pop().unwrap();
+        let (_a, h2, d2) = frag_mgr_b.pop().unwrap();
 
         // Check received data matches
         assert_eq!(&h, h2);
