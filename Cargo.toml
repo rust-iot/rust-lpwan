@@ -31,7 +31,7 @@ default = [ "std", "smoltcp" ]
 radio = "0.9.0"
 ieee802154 = { version = "0.3.0" }
 log = "0.4.8"
-heapless = "0.5.5"
+heapless = "0.6.1"
 rand_core = "0.5.1"
 bytes = { version = "1.0.1", default-features = false }
 byteorder = { version = "1.4.3", default-features = false }
