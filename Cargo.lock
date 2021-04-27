@@ -592,7 +592,7 @@ dependencies = [
  "radio-sx128x",
  "rand 0.8.3",
  "rand-facade",
- "rand_core 0.5.1",
+ "rand_core 0.6.2",
  "simplelog 0.8.0",
  "smoltcp",
  "structopt",
