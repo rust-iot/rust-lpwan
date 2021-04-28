@@ -83,6 +83,8 @@ impl Header {
         };
 
         // Parse out HC1
+        // Disabled due to parsing error, check the type mask better...
+        #[cfg(nope)]
         let hc1 = if buff[offset] & HEADER_TYPE_MASK == HeaderType::Lowpan as u8 {
             let (m, n) = Hc1Header::decode(&buff[offset..])?;
             offset += n;
@@ -91,8 +93,9 @@ impl Header {
             None
         };
 
+        let hc1 = None;
+
         // TODO: parse out IPv6 uncompressed header
-        // TODO: parse out IPv6 HC1 compressed header
 
         Ok(( Self{ hc1, mesh, bcast, frag }, offset ))
     }

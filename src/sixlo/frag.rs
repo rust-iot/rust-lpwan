@@ -204,7 +204,7 @@ impl <const MAX_FRAG_SIZE: usize> Frag<MAX_FRAG_SIZE> {
 
             // Return fragment for TX
             if let Some((h, o, l)) = self.buffs[i].next() {
-                debug!("TX fragment {} offset {}", self.buffs[i].tag, self.buffs[i].offset);
+                debug!("TX fragment {} offset {}", self.buffs[i].tag, o);
 
                 return Some((self.buffs[i].addr, h, self.buffs[i].frag_data(o, l)))
             } else {

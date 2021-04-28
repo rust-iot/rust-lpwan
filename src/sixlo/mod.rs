@@ -103,6 +103,10 @@ where
 
         Ok(())
     }
+
+    pub fn mac(&self) -> &M {
+        &self.mac
+    }
 }
 
 impl <M, E, const MAX_PAYLOAD: usize> SixLo<M, E, MAX_PAYLOAD> 
@@ -166,6 +170,8 @@ where
         }
 
         let mut n = header.encode(&mut buff);
+
+        debug!("TX header: {:?} ({} bytes)", header, n);
 
         let ack = match dest {
             MacAddress::Short(_, s) if s != ShortAddress::BROADCAST => true,
