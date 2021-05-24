@@ -36,6 +36,7 @@ pub use packet::Packet;
 
 pub mod channels;
 
+pub mod slot;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MacState {
