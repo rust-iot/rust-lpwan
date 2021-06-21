@@ -59,7 +59,7 @@ embedded-hal = "1.0.0-alpha.4"
 driver-pal = "0.8.0-alpha.2"
 ctrlc = "3.1.8"
 humantime = "2.1.0"
-rand = "0.8.3"
+rand = "0.8.4"
 
 [patch.crates-io]
 #radio = { path = "../rust-radio" }
