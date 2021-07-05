@@ -40,7 +40,7 @@ bitflags = "1.2.1"
 byte = "0.2.4"
 
 [dependencies.smoltcp]
-version = "0.7.1"
+version = "0.7.5"
 features = [ "proto-ipv6" ]
 default-features = false
 optional = true
