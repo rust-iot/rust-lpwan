@@ -2,19 +2,18 @@
 //
 // https://github.com/rust-iot/rust-lpwan
 // Copyright 2021 Ryan Kurte
-use core::{fmt::Debug, marker::PhantomData};
+use core::{fmt::Debug};
+
+use radio::{State, RadioState, Receive, ReceiveInfo};
 
 use crate::log::{trace, debug};
 
 use crate::{Radio, RawPacket, error::CoreError};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Base<R, S, I, E> {
+pub struct Base<R> {
     radio: R,
     state: BaseState,
-    _radio_state: PhantomData<S>,
-    _radio_err: PhantomData<E>,
-    _radio_info: PhantomData<I>,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -26,21 +25,18 @@ pub enum BaseState {
     Sleeping,
 }
 
-impl <R, S, I, E> Base<R, S, I, E> 
+impl <R> Base<R> 
 where
-    R: Radio<S, I, E>,
-    S: radio::RadioState,
-    I: radio::ReceiveInfo + Default + Debug,
-    E: Debug,
+    R: Radio,
+    <R as Radio>::Error: Debug,
+    <R as State>::State: radio::RadioState,
+    <R as Receive>::Info: radio::ReceiveInfo + Default + Debug,
 {
     /// Create a new MAC base
-    pub fn new(radio: R) -> Result<Self, CoreError<E>> {
+    pub fn new(radio: R) -> Result<Self, CoreError<<R as Radio>::Error>> {
         let s = Self {
             radio,
             state: BaseState::Idle,
-            _radio_state: PhantomData,
-            _radio_err: PhantomData,
-            _radio_info: PhantomData,
         };
 
         Ok(s)
@@ -61,20 +57,20 @@ where
         }
     }
 
-    pub fn sleep(&mut self) -> Result<(), CoreError<E>> {
+    pub fn sleep(&mut self) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
         }
 
-        self.radio.set_state(S::sleep()).map_err(CoreError::Radio)?;
+        self.radio.set_state(<R as State>::State::sleep()).map_err(CoreError::Radio)?;
         self.state = BaseState::Sleeping;
 
         Ok(())
     }
 
     /// Transmit a packet (immediately), this will fail if the radio is busy
-    pub fn transmit(&mut self, now: u64, data: &[u8]) -> Result<(), CoreError<E>> {
+    pub fn transmit(&mut self, now: u64, data: &[u8]) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
@@ -96,7 +92,7 @@ where
     }
 
     /// Set the MAC radio up for packet receipt, this will fail if the radio is busy
-    pub fn receive(&mut self, now: u64) -> Result<(), CoreError<E>> {
+    pub fn receive(&mut self, now: u64) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
@@ -110,7 +106,7 @@ where
     }
 
     /// Fetch the channel RSSI
-    pub fn rssi(&mut self, _now: u64) -> Result<i16, CoreError<E>> {
+    pub fn rssi(&mut self, _now: u64) -> Result<i16, CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
@@ -123,7 +119,7 @@ where
     }
 
     /// Tick to update the MAC radio device
-    pub fn tick(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<E>> {
+    pub fn tick(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<<R as Radio>::Error>> {
         use BaseState::*;
 
         match self.state {
@@ -150,7 +146,7 @@ where
     }
 
     /// Internal function for receive state(s)
-    fn check_receive(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<E>> {
+    fn check_receive(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<<R as Radio>::Error>> {
         // TODO: Check if we're currently receiving a packet and update state
 
         // Check for any received packets (and re-enter RX if required)
@@ -159,7 +155,7 @@ where
         }
 
         let mut pkt = RawPacket::default();
-        let mut info = I::default();
+        let mut info = <R as Receive>::Info::default();
 
         // Fetch received packet
         pkt.len = self.radio.get_received(&mut info, &mut pkt.data).map_err(CoreError::Radio)?;
@@ -179,7 +175,7 @@ where
     }
 
     /// Internal function for transmit state(s)
-    fn check_transmit(&mut self, now: u64) -> Result<(), CoreError<E>> {
+    fn check_transmit(&mut self, now: u64) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check for tx completion
         if !self.radio.check_transmit().map_err(CoreError::Radio)? {
             return Ok(());

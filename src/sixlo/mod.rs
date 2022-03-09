@@ -30,12 +30,11 @@ pub const DEFAULT_FRAG_SIZE: usize = 64;
 /// 6LoWPAN Implementation, provides IP compatible interface to higher-layers.
 /// This includes IPv6 addressing, header compression, fragmentation, 
 /// and neighbour discovery and management
-pub struct SixLo<M, E, const MAX_PAYLOAD: usize> {
+pub struct SixLo<M, const MAX_PAYLOAD: usize> {
     cfg: SixLoConfig,
 
     mac: M,
     mac_addr: MacAddress,
-    _mac_err: PhantomData<E>,
 
     //eui64: Eui64,
     //v6_addr: V6Addr,
@@ -64,10 +63,10 @@ pub enum SixLoError<M> {
 }
 
 
-impl <M, E, const MAX_PAYLOAD: usize> SixLo<M, E, MAX_PAYLOAD> 
+impl <M, const MAX_PAYLOAD: usize> SixLo<M, MAX_PAYLOAD> 
 where
-    M: Mac<Error=E>,
-    E: FmtError,
+    M: Mac,
+    <M as Mac>::Error: FmtError,
 {
     /// Create a new 6LowPAN stack instance
     pub fn new(mac: M, addr: MacAddress, cfg: SixLoConfig) -> Self {
@@ -77,7 +76,6 @@ where
             cfg,
 
             mac,
-            _mac_err: PhantomData,
             mac_addr: addr.clone(),
 
             // TODO: v6 + EUI addrs? PAN IDs?
@@ -91,7 +89,7 @@ where
     }
 
     /// Receive a 6LoWPAN packet, returning header and data on receipt
-    fn handle_rx(&mut self, now_ms: Ts, source: MacAddress, data: &[u8]) -> Result<(), SixLoError<E>> {
+    fn handle_rx(&mut self, now_ms: Ts, source: MacAddress, data: &[u8]) -> Result<(), SixLoError<<M as Mac>::Error>> {
         // Decode headers
         let (hdr, offset) = Header::decode(&data).unwrap();
 
@@ -109,13 +107,13 @@ where
     }
 }
 
-impl <M, E, const MAX_PAYLOAD: usize> SixLo<M, E, MAX_PAYLOAD> 
+impl <M, const MAX_PAYLOAD: usize> SixLo<M, MAX_PAYLOAD> 
 where
-    M: Mac<Error=E>,
-    E: FmtError,
+    M: Mac,
+    <M as Mac>::Error: FmtError,
 {
     /// Tick to update the stack
-    pub fn tick(&mut self, now_ms: u64) -> Result<(), SixLoError<E>> {
+    pub fn tick(&mut self, now_ms: u64) -> Result<(), SixLoError<<M as Mac>::Error>> {
         let mut buff = [0u8; MAX_PAYLOAD];
 
         // Tick internal MAC
@@ -141,7 +139,7 @@ where
 
             // Encode header + data
             let mut n = h.encode(&mut buff);
-            &buff[n..n+d.len()].copy_from_slice(d);
+            buff[n..n+d.len()].copy_from_slice(d);
             n += d.len();
 
             // Transmit fragment
@@ -152,7 +150,7 @@ where
     }
 
     /// Transmit a datagram, fragmenting this as required
-    pub fn transmit(&mut self, now_ms: Ts, dest: MacAddress, data: &[u8]) -> Result<(), SixLoError<E>> {
+    pub fn transmit(&mut self, now_ms: Ts, dest: MacAddress, data: &[u8]) -> Result<(), SixLoError<<M as Mac>::Error>> {
         let mut buff = [0u8; MAX_PAYLOAD];
 
         // Write IPv6 headers
@@ -182,7 +180,7 @@ where
         // If we don't need to fragment, send directly
         if n + data.len() < buff.len() {
             // Copy data into TX buffer
-            &buff[n..n+data.len()].copy_from_slice(data);
+            buff[n..n+data.len()].copy_from_slice(data);
             n += data.len();
 
             debug!("Immediate TX {} byte datagram", data.len());
@@ -204,9 +202,9 @@ where
     }
 
     /// Receive a datagram, reassembled internally
-    pub fn receive(&mut self, now_ms: Ts, buff: &mut [u8]) -> Result<Option<(usize, MacAddress, Header)>, SixLoError<E>> {
+    pub fn receive(&mut self, now_ms: Ts, buff: &mut [u8]) -> Result<Option<(usize, MacAddress, Header)>, SixLoError<<M as Mac>::Error>> {
         if let Some((a, h, d)) = self.frag.pop() {
-            &mut buff[..d.len()].copy_from_slice(d);
+            buff[..d.len()].copy_from_slice(d);
 
             Ok(Some((d.len(), a.clone(), h.clone())))
         } else {

@@ -11,10 +11,10 @@ use crate::Mac;
 use super::SixLo;
 
 // TODO: how to implement smolctp device on top of 6lo + 802.15.4?
-impl <'a, M, E, const MAX_PAYLOAD: usize> phy::Device<'a> for SixLo<M, E, MAX_PAYLOAD>
+impl <'a, M, const MAX_PAYLOAD: usize> phy::Device<'a> for SixLo<M, MAX_PAYLOAD>
 where
-    M: Mac<E>,
-    E: core::fmt::Debug,
+    M: Mac,
+    <M as Mac>::Error: core::fmt::Debug,
 {
     type RxToken = RxToken<'a>;
     type TxToken = TxToken<'a>;

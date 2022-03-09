@@ -8,7 +8,7 @@
 
 use core::fmt::Debug;
 
-use radio::{State, Busy, Transmit, Receive, Rssi, ReceiveInfo};
+use radio::{State, Busy, Transmit, Receive, Rssi, ReceiveInfo, RadioState};
 
 #[cfg(any(test, feature="std"))]
 extern crate std;
@@ -67,17 +67,36 @@ pub struct RxInfo<Address=ieee802154::mac::Address> {
 }
 
 /// Radio interface combines base [`radio`] traits
-pub trait Radio<S: radio::RadioState, I: radio::ReceiveInfo, E: Debug>: radio::State<State=S, Error=E> + radio::Busy<Error=E> + radio::Transmit<Error=E> + radio::Receive<Info=I, Error=E> + radio::Rssi<Error=E> {}
+pub trait Radio: 
+        radio::State<State=<Self as Radio>::State, Error=<Self as Radio>::Error> + 
+        radio::Busy<Error=<Self as Radio>::Error> + 
+        radio::Transmit<Error=<Self as Radio>::Error> + 
+        radio::Receive<Info=<Self as Radio>::Info, Error=<Self as Radio>::Error> + 
+        radio::Rssi<Error=<Self as Radio>::Error> {
+
+    type State: RadioState + Debug;
+    type Info: ReceiveInfo + Debug + Default;
+    type Error: Debug;
+}
 
 /// Automatic Radio impl for radio devices meeting the trait constraint
-impl <T, S: radio::RadioState, I: ReceiveInfo, E: Debug> Radio<S, I, E> for T where 
-    T: State<State=S, Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Info=I, Error=E> + Rssi<Error=E>,
-{}
+impl <T, E: Debug> Radio for T where 
+    T: State<Error=E> + Busy<Error=E> + Transmit<Error=E> + Receive<Error=E> + Rssi<Error=E>,
+    <T as State>::State: RadioState + Debug,
+    <T as Receive>::Info: ReceiveInfo + Debug + Default,
+{
+    type Error = E;
+    type State = <T as State>::State;
+    type Info = <T as Receive>::Info;
+}
 
 
 /// Network interface abstraction
 pub trait Mac<Address=ieee802154::mac::Address> {
-    type Error;
+    type Error: Debug;
+
+    /// Fetch MAC layer state
+    fn state(&self) -> Result<MacState<Address>, Self::Error>;
 
     /// Periodic tick to poll / update layer operation
     fn tick(&mut self) -> Result<(), Self::Error>;
@@ -90,6 +109,13 @@ pub trait Mac<Address=ieee802154::mac::Address> {
 
     /// Check for received packets, buffered by the implementer
     fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo<Address>)>, Self::Error>;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum MacState<Address> {
+    Disconnected,
+    Synced(Address),
+    Associated(Address),
 }
 
 // Wrap log macros to support switching between defmt and standard logging

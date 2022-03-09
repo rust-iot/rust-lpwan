@@ -252,7 +252,7 @@ impl <const N: usize> FragData for [u8; N] {
     fn from_bytes(data: &[u8]) -> Self {
         let mut b = [0u8; N];
 
-        &b[..data.len()].copy_from_slice(data);
+        b[..data.len()].copy_from_slice(data);
 
         b
     }
@@ -401,7 +401,7 @@ impl <B: FragData, const MAX_FRAG: usize> FragBuffer<B, MAX_FRAG> {
         // Apply fragment
         let offset = fh.datagram_offset.unwrap_or(0) as usize * 8;
         let len = data.len();
-        &self.buff.as_mut()[offset..offset+len].copy_from_slice(data);
+        self.buff.as_mut()[offset..offset+len].copy_from_slice(data);
 
         // Update mask
         self.offset = offset;

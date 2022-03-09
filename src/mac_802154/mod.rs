@@ -17,6 +17,7 @@ use ieee802154::mac::command::{
     CapabilityInformation,
     AssociationStatus,
 };
+use radio::{State, RadioState, Receive, ReceiveInfo};
 
 
 use crate::log::{trace, debug, info, warn, error};
@@ -25,7 +26,7 @@ use heapless::{spsc::Queue, consts::U16};
 use rand_core::RngCore;
 use rand_facade::{GlobalRng};
 
-use crate::{Mac as MacIf, Radio, RawPacket, RxInfo, error::CoreError, timer::Timer};
+use crate::{Mac as MacIf, MacState, Radio, RawPacket, RxInfo, error::CoreError, timer::Timer};
 use crate::base::{Base, BaseState};
 
 pub mod config;
@@ -37,14 +38,7 @@ pub use packet::Packet;
 pub mod channels;
 
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum MacState {
-    Idle,
-    Sleep,
-    Beacon,
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SyncState {
     Unsynced,
     Synced(Address),
@@ -59,7 +53,7 @@ impl SyncState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum AssocState {
     Unassociated,
     Pending(Address, u64),
@@ -137,12 +131,12 @@ impl MacStats  {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Mac<R, S, I, E, T> {
+pub struct Mac<R, T> {
     pub address: ExtendedAddress,
     pub short_addr: Option<ShortAddress>,
 
     config: Config,
-    base: Base<R, S, I, E>,
+    base: Base<R>,
     timer: T,
 
     seq: u8,
@@ -165,15 +159,14 @@ pub struct Mac<R, S, I, E, T> {
 
 
 
-impl <R, S, I, E, T> Mac<R, S, I, E, T> 
+impl <R, T> Mac<R, T> 
 where
-    R: Radio<S, I, E>,
-    S: radio::RadioState,
-    I: radio::ReceiveInfo + Default + Debug,
-    E: Debug,
+    R: Radio,
+    <R as State>::State: RadioState + Debug,
+    <R as Receive>::Info: ReceiveInfo + Debug + Default,
     T: Timer,
 {
-    pub fn new(address: ExtendedAddress, config: Config, radio: R, timer: T) -> Result<Self, CoreError<E>> {
+    pub fn new(address: ExtendedAddress, config: Config, radio: R, timer: T) -> Result<Self, CoreError<<R as Radio>::Error>> {
         let mut s = Self {
             address,
             short_addr: None,
@@ -220,53 +213,19 @@ where
     }
 }
 
-impl <R, S, I, E, T> MacIf<Address> for Mac<R, S, I, E, T> 
+impl <R, T> MacIf<Address> for Mac<R, T> 
 where
-    R: Radio<S, I, E>,
-    S: radio::RadioState,
-    I: radio::ReceiveInfo + Default + Debug,
-    E: Debug,
+    R: Radio,
     T: Timer,
 {
-    type Error = CoreError<E>;
+    type Error = CoreError<<R as Radio>::Error>;
 
-    /// Enqueue a packet for TX
-    fn transmit(&mut self, dest: Address, data: &[u8], ack: bool) -> Result<(), Self::Error> {
-        // Setup packet for sending
-        let packet = Packet::data(dest, self.addr(), self.seq(), data, ack);
-
-        // Enqueue in TX buffer
-        if let Err(_e) = self.tx_buff.enqueue((TxState::default(), packet)) {
-            error!("Error enqueuing packet to send");
+    fn state(&self) -> Result<MacState<Address>, Self::Error> {
+        match (self.sync_state, self.assoc_state) {
+            (SyncState::Synced(addr), AssocState::Associated(_)) => Ok(MacState::Associated(addr)),
+            (SyncState::Synced(addr), _) => Ok(MacState::Synced(addr)),
+            (SyncState::Unsynced, _) => Ok(MacState::Disconnected),
         }
-
-        Ok(())
-    }
-
-    /// Check for received packets
-    fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo)>, Self::Error> {
-        // Fetch from RX buffer
-        let rx = match self.rx_buff.dequeue() {
-            Some(rx) => rx,
-            None => return Ok(None)
-        };
-
-        // Decode data
-        let payload = rx.1.payload();
-        &data[..payload.len()].copy_from_slice(&payload);
-
-        // Return payload length
-        Ok(Some((payload.len(), rx.0)))
-    }
-
-    /// Check whether the MAC is busy
-    fn busy(&mut self) -> Result<bool, Self::Error> {
-        let b =self.csma_state != CsmaState::None
-            || self.ack_state != AckState::None
-            || !self.assoc_state.is_associated()
-            || self.tx_buff.capacity() == 0;
-
-        Ok(b)
     }
 
     fn tick(&mut self) -> Result<(), Self::Error> {
@@ -380,14 +339,50 @@ where
 
         Ok(())
     }
+
+    /// Check whether the MAC is busy
+    fn busy(&mut self) -> Result<bool, Self::Error> {
+        let b =self.csma_state != CsmaState::None
+            || self.ack_state != AckState::None
+            || !self.assoc_state.is_associated()
+            || self.tx_buff.capacity() == 0;
+
+        Ok(b)
+    }
+
+    /// Enqueue a packet for TX
+    fn transmit(&mut self, dest: Address, data: &[u8], ack: bool) -> Result<(), Self::Error> {
+        // Setup packet for sending
+        let packet = Packet::data(dest, self.addr(), self.seq(), data, ack);
+
+        // Enqueue in TX buffer
+        if let Err(_e) = self.tx_buff.enqueue((TxState::default(), packet)) {
+            error!("Error enqueuing packet to send");
+        }
+
+        Ok(())
+    }
+
+    /// Check for received packets
+    fn receive(&mut self, data: &mut[u8]) -> Result<Option<(usize, RxInfo)>, Self::Error> {
+        // Fetch from RX buffer
+        let rx = match self.rx_buff.dequeue() {
+            Some(rx) => rx,
+            None => return Ok(None)
+        };
+
+        // Decode data
+        let payload = rx.1.payload();
+        data[..payload.len()].copy_from_slice(&payload);
+
+        // Return payload length
+        Ok(Some((payload.len(), rx.0)))
+    }
 }
 
-impl <R, S, I, E, T> Mac<R, S, I, E, T> 
+impl <R, T> Mac<R, T> 
 where
-    R: Radio<S, I, E>,
-    S: radio::RadioState,
-    I: radio::ReceiveInfo + Default + Debug,
-    E: Debug,
+    R: Radio,
     T: Timer,
 {
     /// Fetch configured MAC address
@@ -416,7 +411,7 @@ where
         self.stats.clone()
     }
 
-    fn tick_beacon(&mut self, now_ms: u64, asn: u64) -> Result<(), CoreError<E>> {
+    fn tick_beacon(&mut self, now_ms: u64, asn: u64) -> Result<(), CoreError<<R as Radio>::Error>> {
 
         // No ASN change / nothing we need to do for beaconing
         if self.last_asn == asn {
@@ -493,7 +488,7 @@ where
         Ok(())
     }
 
-    fn tick_cap(&mut self, now_ms: u64, asn: u64) -> Result<(), CoreError<E>> {
+    fn tick_cap(&mut self, now_ms: u64, asn: u64) -> Result<(), CoreError<<R as Radio>::Error>> {
         let rsn = self.config.calculate_rsn(now_ms, self.sync_offset);
 
         if asn != self.last_asn && rsn == 0 {
@@ -609,7 +604,7 @@ where
         Ok(())
     }
 
-    fn handle_received(&mut self, now: u64, rx: RawPacket) -> Result<(), CoreError<E>> {
+    fn handle_received(&mut self, now: u64, rx: RawPacket) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Decode packet
         let p = match Packet::decode(rx.data(), false) {
             Ok(p) => p,
