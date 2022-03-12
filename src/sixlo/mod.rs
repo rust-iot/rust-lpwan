@@ -6,7 +6,7 @@
 use core::marker::PhantomData;
 
 use crate::{Mac, Ts};
-use crate::log::{FmtError, debug, info, error};
+use crate::log::{FmtError, trace, debug, info, error};
 
 use ieee802154::mac::{Address as MacAddress, ShortAddress, ExtendedAddress};
 
@@ -115,6 +115,8 @@ where
     /// Tick to update the stack
     pub fn tick(&mut self, now_ms: u64) -> Result<(), SixLoError<<M as Mac>::Error>> {
         let mut buff = [0u8; MAX_PAYLOAD];
+
+        trace!("MAC tick at {} ms", now_ms);
 
         // Tick internal MAC
         self.mac.tick().map_err(SixLoError::Mac)?;

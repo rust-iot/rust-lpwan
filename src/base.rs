@@ -16,7 +16,8 @@ pub struct Base<R> {
     state: BaseState,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
+#[cfg_attr(feature="defmt", derive(defmt::Format))]
 pub enum BaseState {
     Idle,
     Listening,
@@ -62,6 +63,8 @@ where
         if self.is_busy() {
             return Err(CoreError::Busy);
         }
+
+        debug!("Entering sleep state");
 
         self.radio.set_state(<R as State>::State::sleep()).map_err(CoreError::Radio)?;
         self.state = BaseState::Sleeping;
@@ -121,6 +124,8 @@ where
     /// Tick to update the MAC radio device
     pub fn tick(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<<R as Radio>::Error>> {
         use BaseState::*;
+
+        trace!("BASE tick at {} ms, state: {}", now, self.state);
 
         match self.state {
             Idle => {

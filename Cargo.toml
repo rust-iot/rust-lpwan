@@ -35,6 +35,7 @@ byteorder = { version = "1.4.3", default-features = false }
 defmt = { version = "0.3.1", optional = true }
 bitflags = "1.2.1"
 byte = "0.2.4"
+strum = { version = "0.24.0", default_features = false, features = [ "derive" ] }
 
 [dependencies.smoltcp]
 version = "0.7.1"

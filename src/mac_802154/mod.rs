@@ -37,7 +37,7 @@ pub use packet::Packet;
 pub mod channels;
 
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SyncState {
     Unsynced,
@@ -53,7 +53,7 @@ impl SyncState {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum AssocState {
     Unassociated,
