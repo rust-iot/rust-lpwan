@@ -404,11 +404,6 @@ where
         }
     }
 
-    /// Fetch MAC state
-    pub fn state(&self) -> (SyncState, AssocState) {
-        (self.sync_state.clone(), self.assoc_state.clone())
-    }
-
     /// Fetch and increment TX sequence number
     fn seq(&mut self) -> u8 {
         let s = self.seq;
