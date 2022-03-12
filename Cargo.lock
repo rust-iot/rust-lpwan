@@ -558,8 +558,9 @@ dependencies = [
  "heapless",
  "humantime",
  "ieee802154",
+ "linux-embedded-hal",
  "log",
- "radio 0.11.0",
+ "radio",
  "radio-sx128x",
  "rand",
  "rand_core",
@@ -749,31 +750,24 @@ dependencies = [
 
 [[package]]
 name = "radio"
-version = "0.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2daa60788f83f8fa18976bca4712abd321056efbf26b4336b979c709dcae5e89"
-dependencies = [
- "chrono",
- "embedded-hal 1.0.0-alpha.7",
- "log",
- "nb 1.0.0",
-]
-
-[[package]]
-name = "radio"
 version = "0.11.0"
 dependencies = [
+ "byteorder",
  "chrono",
  "embedded-hal 1.0.0-alpha.7",
  "embedded-hal-mock",
+ "humantime",
+ "libc",
  "log",
  "nb 1.0.0",
+ "pcap-file",
+ "rolling-stats",
+ "structopt",
 ]
 
 [[package]]
 name = "radio-sx128x"
 version = "0.17.2"
-source = "git+https://github.com/ryankurte/rust-radio-sx128x#80a2aae4a9ac363a1c4bbe0677657a4166834f2b"
 dependencies = [
  "bitflags",
  "crc16",
@@ -784,8 +778,7 @@ dependencies = [
  "humantime",
  "libc",
  "log",
- "pcap-file",
- "radio 0.9.1",
+ "radio",
  "serde",
  "structopt",
  "thiserror",
@@ -868,6 +861,15 @@ checksum = "88aa938cda42a0cf62a20cfe8d139ff1af20c2e681212b5b34adb5a58333f222"
 dependencies = [
  "lazy_static",
  "regex",
+]
+
+[[package]]
+name = "rolling-stats"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eba1292d4138a71f73b9317a404f1e6a1fa1a95adcb8ff6622118d4a955eaa8c"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]

@@ -19,6 +19,7 @@ pub const MAX_PAYLOAD_LEN: usize = 256;
 // TODO: disabled on heapless::Vec support in defmt
 // See: https://github.com/japaric/heapless/issues/171
 //#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+
 pub struct Packet<const N: usize = 256> {
     pub header: Header,
 

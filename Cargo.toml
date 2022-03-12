@@ -14,11 +14,8 @@ std = [ "bytes/std" ]
 alloc = []
 mocks = []
 
-# Enable defmt logging
-log-defmt = [ "defmt", "ieee802154/defmt", "defmt-default" ]
-
 # Defmt log levels
-defmt-default = [ "defmt", "ieee802154/defmt" ]
+defmt-default = [ "defmt", "ieee802154/defmt", "defmt-debug" ]
 defmt-trace = []
 defmt-debug = []
 defmt-info = []
@@ -47,6 +44,7 @@ optional = true
 
 [dev-dependencies]
 radio = { version = "0.11.0", features = ["mock"] }
+linux-embedded-hal = "0.4.0-alpha.2"
 simplelog = "0.8.0"
 anyhow = "1.0.40"
 structopt = "0.3.21"
@@ -59,8 +57,8 @@ rand = "0.8.3"
 
 [patch.crates-io]
 #radio = { path = "../rust-radio" }
-#radio-sx128x = { path = "../rust-radio-sx128x" }
+radio-sx128x = { path = "../radio/radio-sx128x" }
 radio = { path = "../radio/radio" }
-radio-sx128x = { git = "https://github.com/ryankurte/rust-radio-sx128x" }
+#radio-sx128x = { git = "https://github.com/ryankurte/rust-radio-sx128x" }
 #ieee802154 = { git = "https://github.com/ryankurte/rust-ieee802.15.4", branch = "feature/802.15.4-2015-simple" }
 ieee802154 = { path = "../rust-ieee802.15.4" }

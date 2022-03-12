@@ -38,6 +38,7 @@ pub mod channels;
 
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum SyncState {
     Unsynced,
     Synced(Address),
@@ -53,6 +54,7 @@ impl SyncState {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum AssocState {
     Unassociated,
     Pending(Address, u64),
@@ -69,6 +71,7 @@ impl AssocState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct TxState {
     pub pending: bool,
     pub retries: u8,
@@ -103,12 +106,14 @@ pub enum AckState {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum MacEvent {
 
 }
 
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct MacStats {
     pub deadline_miss_tx: u32,
     pub deadline_miss_ack: u32,

@@ -11,8 +11,9 @@ use log::{debug, info, error};
 
 use structopt::StructOpt;
 
-use embedded_hal::blocking::delay::DelayMs;
-use driver_pal::hal::{HalInst, HalDelay, DeviceConfig};
+use embedded_hal::delay::blocking::DelayUs;
+use linux_embedded_hal::Delay;
+use driver_pal::hal::{HalInst, DeviceConfig};
 
 use radio_sx128x::prelude::*;
 use radio_sx128x::{Config as Sx128xConfig};
@@ -99,7 +100,7 @@ fn main() -> anyhow::Result<()> {
         gfsk.crc_mode = radio_sx128x::device::common::GfskFlrcCrcModes::RADIO_CRC_2_BYTES;
     }
 
-    let mut radio = match Sx128x::spi(spi, pins.cs, pins.busy, pins.ready, pins.reset, HalDelay{}, &rf_config) {
+    let mut radio = match Sx128x::spi(spi, pins.cs, pins.busy, pins.ready, pins.reset, Delay{}, &rf_config) {
         Ok(v) => v,
         Err(e) => {
             return Err(anyhow::anyhow!("Radio init error: {:?}", e));
@@ -131,7 +132,7 @@ fn main() -> anyhow::Result<()> {
     let sixlo_cfg = SixLoConfig{
         ..Default::default()
     };
-    let mut sixlo = SixLo::<_, _, 127>::new(mac, MacAddress::Extended(PanId(1), address), sixlo_cfg);
+    let mut sixlo = SixLo::<_, 127>::new(mac, MacAddress::Extended(PanId(1), address), sixlo_cfg);
 
 
     debug!("Starting loop");
@@ -177,7 +178,7 @@ fn main() -> anyhow::Result<()> {
         // TODO: rx / tx packets
 
         // TODO: wait a wee while for the next tick
-        HalDelay{}.try_delay_ms(1).unwrap();
+        Delay{}.delay_ms(1).unwrap();
     }
 
     Ok(())

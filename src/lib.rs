@@ -35,17 +35,18 @@ pub mod prelude;
 pub type Ts = u64;
 
 /// Statically sized packet buffer
-pub struct RawPacket{
-    data: [u8; 256],
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
+pub struct RawPacket<const N: usize = 256>{
+    data: [u8; N],
     len: usize,
     rssi: i16,
 }
 
 /// Default constructor for raw packets
-impl Default for RawPacket {
+impl <const N: usize> Default for RawPacket<N> {
     fn default() -> Self {
         Self {
-            data: [0u8; 256],
+            data: [0u8; N],
             len: 0,
             rssi: 0,
         }
@@ -53,7 +54,7 @@ impl Default for RawPacket {
 }
 
 /// Fetch data from a raw packet
-impl RawPacket {
+impl <const N: usize> RawPacket<N> {
     fn data(&self) -> &[u8] {
         &self.data[..self.len]
     }
@@ -61,6 +62,7 @@ impl RawPacket {
 
 /// Receive information object
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct RxInfo<Address=ieee802154::mac::Address> {
     /// Source address
     pub source: Address,
@@ -114,6 +116,7 @@ pub trait Mac<Address=ieee802154::mac::Address> {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum MacState<Address> {
     Disconnected,
     Synced(Address),
