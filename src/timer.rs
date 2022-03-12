@@ -8,10 +8,10 @@
 ///
 /// All methods are monotonic and relative to the same unknown epoc
 pub trait Timer {
-    /// Returns the number of millisecond ticks since some unknown epoc
+    /// Returns the number of millisecond ticks since some unknown epoch
     fn ticks_ms(&self) -> u64;
 
-    /// Returns the number of microsecond ticks since some unknown epoc
+    /// Returns the number of microsecond ticks since some unknown epoch
     fn ticks_us(&self) -> u64;
 }
 

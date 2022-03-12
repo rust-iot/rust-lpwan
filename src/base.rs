@@ -155,10 +155,11 @@ where
         }
 
         let mut pkt = RawPacket::default();
-        let mut info = <R as Receive>::Info::default();
 
         // Fetch received packet
-        pkt.len = self.radio.get_received(&mut info, &mut pkt.data).map_err(CoreError::Radio)?;
+        let (len, info) = self.radio.get_received( &mut pkt.data).map_err(CoreError::Radio)?;
+
+        pkt.len = len;
         pkt.rssi = info.rssi();
 
         debug!("Received {} bytes with RSSI {} at {} ms", pkt.len, info.rssi(), now);

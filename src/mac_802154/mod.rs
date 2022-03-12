@@ -21,10 +21,9 @@ use radio::{State, RadioState, Receive, ReceiveInfo};
 
 
 use crate::log::{trace, debug, info, warn, error};
-use heapless::{spsc::Queue, consts::U16};
+use heapless::{spsc::Queue};
 
-use rand_core::RngCore;
-use rand_facade::{GlobalRng};
+use rand_core::{RngCore, OsRng};
 
 use crate::{Mac as MacIf, MacState, Radio, RawPacket, RxInfo, error::CoreError, timer::Timer};
 use crate::base::{Base, BaseState};
@@ -131,7 +130,7 @@ impl MacStats  {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Mac<R, T> {
+pub struct Mac<R, T, const N: usize = 4> {
     pub address: ExtendedAddress,
     pub short_addr: Option<ShortAddress>,
 
@@ -153,8 +152,8 @@ pub struct Mac<R, T> {
 
     stats: MacStats,
 
-    rx_buff: Queue<(RxInfo, Packet), U16>,
-    tx_buff: Queue<(TxState, Packet), U16>,
+    rx_buff: Queue<(RxInfo, Packet), 4>,
+    tx_buff: Queue<(TxState, Packet), 4>,
 }
 
 
@@ -166,6 +165,8 @@ where
     <R as Receive>::Info: ReceiveInfo + Debug + Default,
     T: Timer,
 {
+    /// Setup the MAC
+    /// This takes control of the provided radio, and uses the provided timer for operation timekeeping
     pub fn new(address: ExtendedAddress, config: Config, radio: R, timer: T) -> Result<Self, CoreError<<R as Radio>::Error>> {
         let mut s = Self {
             address,
@@ -210,6 +211,10 @@ where
         s.base.receive(now)?;
 
         Ok(s)
+    }
+
+    pub fn ticks_ms(&self) -> u64 {
+        self.timer.ticks_ms()
     }
 }
 
@@ -509,7 +514,7 @@ where
                     // Re-schedule CSMA attempt
                     let be = (self.config.min_be as u32 + *retries as u32).min(self.config.max_be as u32);
 
-                    let backoff = (GlobalRng::get().next_u32() % (2u32.pow(be as u32) - 1)) as u64 + 1;
+                    let backoff = (OsRng{}.next_u32() % (2u32.pow(be as u32) - 1)) as u64 + 1;
 
                     debug!("Scheduling CSMA TX retry for ASN {} ({} slots)", asn + backoff, backoff);
 
@@ -542,7 +547,7 @@ where
                     false => self.config.min_be,
                 };
 
-                let backoff = (GlobalRng::get().next_u32() % (2u32.pow(be as u32) - 1)) as u64 + 1;
+                let backoff = (OsRng{}.next_u32() % (2u32.pow(be as u32) - 1)) as u64 + 1;
 
                 debug!("Scheduling CSMA TX for ASN {} ({} slots)", asn + backoff, backoff);
 

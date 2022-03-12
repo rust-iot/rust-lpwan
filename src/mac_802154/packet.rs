@@ -6,7 +6,7 @@
 use ieee802154::mac::*;
 use ieee802154::mac::{beacon::Beacon, command::Command};
 
-use heapless::{Vec, consts::U256};
+use heapless::{Vec};
 
 // TODO: fix or remove this?
 pub const MAX_PAYLOAD_LEN: usize = 256;
@@ -19,13 +19,13 @@ pub const MAX_PAYLOAD_LEN: usize = 256;
 // TODO: disabled on heapless::Vec support in defmt
 // See: https://github.com/japaric/heapless/issues/171
 //#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Packet {
+pub struct Packet<const N: usize = 256> {
     pub header: Header,
 
     pub content: FrameContent,
 
     // TODO: replace with const generic version when available in heapless
-    payload: Vec<u8, U256>,
+    payload: Vec<u8, N>,
 
     pub footer: [u8; 2],
 }

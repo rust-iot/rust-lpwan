@@ -7,6 +7,7 @@ use ieee802154::mac::DecodeError;
 
 /// Basic MAC errors
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature="defmt", derive(defmt::Format))]
 pub enum CoreError<E> {
     /// Buffer full
     BufferFull,

@@ -6,6 +6,8 @@
 
 #![no_std]
 
+#![feature(const_generics_defaults)]
+
 use core::fmt::Debug;
 
 use radio::{State, Busy, Transmit, Receive, Rssi, ReceiveInfo, RadioState};
