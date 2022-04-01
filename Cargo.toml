@@ -15,7 +15,7 @@ alloc = []
 mocks = []
 
 # Defmt log levels
-defmt-default = [ "defmt", "ieee802154/defmt", "defmt-debug" ]
+defmt-default = [ "defmt", "ieee802154/defmt" ]
 defmt-trace = []
 defmt-debug = []
 defmt-info = []
@@ -49,7 +49,7 @@ linux-embedded-hal = "0.4.0-alpha.2"
 simplelog = "0.8.0"
 anyhow = "1.0.40"
 structopt = "0.3.21"
-radio-sx128x = "0.17.2"
+radio-sx128x = "0.18.0"
 embedded-hal = "1.0.0-alpha.7"
 driver-pal = "0.8.0-alpha.2"
 ctrlc = "3.1.8"
@@ -57,9 +57,11 @@ humantime = "2.1.0"
 rand = "0.8.3"
 
 [patch.crates-io]
-#radio = { path = "../rust-radio" }
-radio-sx128x = { path = "../radio/radio-sx128x" }
-radio = { path = "../radio/radio" }
-#radio-sx128x = { git = "https://github.com/ryankurte/rust-radio-sx128x" }
-#ieee802154 = { git = "https://github.com/ryankurte/rust-ieee802.15.4", branch = "feature/802.15.4-2015-simple" }
-ieee802154 = { path = "../rust-ieee802.15.4" }
+#radio = { path = "../radio/radio" }
+#radio-sx128x = { path = "../radio/radio-sx128x" }
+#ieee802154 = { path = "../rust-ieee802.15.4" }
+
+#radio = { git = "https://github.com/rust-iot/radio-hal" }
+#radio-sx128x = { git = "https://github.com/rust-iot/rust-radio-sx128x" }
+ieee802154 = { git = "https://github.com/ryankurte/rust-ieee802.15.4", branch = "feature/802.15.4-2015-simple" }
+

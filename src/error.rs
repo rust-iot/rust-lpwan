@@ -5,9 +5,11 @@
 
 use ieee802154::mac::DecodeError;
 
+use crate::MacError;
+
 /// Basic MAC errors
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(feature="defmt", derive(defmt::Format))]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum CoreError<E> {
     /// Buffer full
     BufferFull,
@@ -29,3 +31,11 @@ pub enum CoreError<E> {
     Busy,
 }
 
+impl<E> MacError for CoreError<E> {
+    fn queue_full(&self) -> bool {
+        match self {
+            Self::BufferFull => true,
+            _ => false,
+        }
+    }
+}
