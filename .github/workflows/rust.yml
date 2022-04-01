@@ -25,10 +25,10 @@ jobs:
             args: --no-default-features --features="std"
           - name: Build with `no_std`
             cmd: build
-            args: --no-default-features --features="rand-facade/os_rng,alloc"
+            args: --no-default-features --features="alloc"
           - name: Build with `defmt`
             cmd: build
-            args: --no-default-features --features="log-defmt,rand-facade/os_rng,alloc"
+            args: --no-default-features --features="log-defmt,alloc"
 
     steps:
     - uses: actions/checkout@v2
