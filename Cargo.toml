@@ -10,34 +10,36 @@ license = "MPL-2.0"
 
 [features]
 # Basic features
-std = [ "rand-facade/os_rng", "bytes/std" ]
+std = [ "bytes/std" ]
 alloc = []
 mocks = []
 
-# Enable defmt logging
-log-defmt = [ "defmt", "ieee802154/defmt", "defmt-default" ]
-
 # Defmt log levels
-defmt-default = []
+defmt-default = [ "defmt", "ieee802154/defmt" ]
 defmt-trace = []
 defmt-debug = []
 defmt-info = []
 defmt-warn = []
 defmt-error = []
 
+# Enable defmt logging (requires ieee802154 feature)
+log-defmt = [ "defmt", "ieee802154/defmt" ]
+
+# Default features
 default = [ "std", "smoltcp" ]
 
 [dependencies]
-radio = "0.9.0"
+radio = "0.11.0"
 ieee802154 = { version = "0.3.0" }
 log = "0.4.8"
-heapless = "0.5.5"
-rand_core = "0.5.1"
+heapless = "0.7.10"
+rand_core = { version = "0.6.3", default-features = false, features = [ "getrandom" ] }
 bytes = { version = "1.0.1", default-features = false }
 byteorder = { version = "1.4.3", default-features = false }
-defmt = { version = "0.2.1", optional = true }
+defmt = { version = "0.3.1", optional = true }
 bitflags = "1.2.1"
 byte = "0.2.4"
+strum = { version = "0.24.0", default_features = false, features = [ "derive" ] }
 
 [dependencies.smoltcp]
 version = "0.7.1"
@@ -45,24 +47,25 @@ features = [ "proto-ipv6" ]
 default-features = false
 optional = true
 
-[dependencies.rand-facade]
-version = "0.2.0"
-default-features = false
-
 [dev-dependencies]
-radio = { version = "0.9.0", features = ["mock"] }
+radio = { version = "0.11.0", features = ["mock"] }
+linux-embedded-hal = "0.4.0-alpha.2"
 simplelog = "0.8.0"
 anyhow = "1.0.40"
 structopt = "0.3.21"
-radio-sx128x = "0.16.0"
-embedded-hal = "1.0.0-alpha.4"
+radio-sx128x = "0.18.0"
+embedded-hal = "1.0.0-alpha.7"
 driver-pal = "0.8.0-alpha.2"
 ctrlc = "3.1.8"
 humantime = "2.1.0"
 rand = "0.8.3"
 
 [patch.crates-io]
-#radio = { path = "../rust-radio" }
-#radio-sx128x = { path = "../rust-radio-sx128x" }
-radio-sx128x = { git = "https://github.com/ryankurte/rust-radio-sx128x" }
+#radio = { path = "../radio/radio" }
+#radio-sx128x = { path = "../radio/radio-sx128x" }
+#ieee802154 = { path = "../rust-ieee802.15.4" }
+
+#radio = { git = "https://github.com/rust-iot/radio-hal" }
+#radio-sx128x = { git = "https://github.com/rust-iot/rust-radio-sx128x" }
 ieee802154 = { git = "https://github.com/ryankurte/rust-ieee802.15.4", branch = "feature/802.15.4-2015-simple" }
+

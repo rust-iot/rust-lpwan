@@ -6,7 +6,6 @@
 /// 2.4GHz channel
 pub struct Ch2450(u16);
 
-
 impl Ch2450 {
     /// Fetch the channel frequency in MHz
     pub fn mhz(self) -> f32 {
@@ -27,6 +26,7 @@ impl Ch2450 {
 /// 2.45 GHz Channel Pages
 pub const CHANNEL_PAGES_2450: &'static [&'static [u16]] = &[
     // Page 0
-    &[11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26],
+    &[
+        11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    ],
 ];
-

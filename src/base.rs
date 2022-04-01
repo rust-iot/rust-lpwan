@@ -2,22 +2,22 @@
 //
 // https://github.com/rust-iot/rust-lpwan
 // Copyright 2021 Ryan Kurte
-use core::{fmt::Debug, marker::PhantomData};
+use core::{fmt::Debug, ops::Deref};
 
-use crate::log::{trace, debug};
+use radio::{RadioState, Receive, ReceiveInfo, State};
 
-use crate::{Radio, RawPacket, error::CoreError};
+use crate::log::{debug, trace};
+
+use crate::{error::CoreError, Radio, RawPacket};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Base<R, S, I, E> {
+pub struct Base<R> {
     radio: R,
     state: BaseState,
-    _radio_state: PhantomData<S>,
-    _radio_err: PhantomData<E>,
-    _radio_info: PhantomData<I>,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, strum::Display)]
+#[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub enum BaseState {
     Idle,
     Listening,
@@ -26,21 +26,18 @@ pub enum BaseState {
     Sleeping,
 }
 
-impl <R, S, I, E> Base<R, S, I, E> 
+impl<R> Base<R>
 where
-    R: Radio<S, I, E>,
-    S: radio::RadioState,
-    I: radio::ReceiveInfo + Default + Debug,
-    E: Debug,
+    R: Radio,
+    <R as Radio>::Error: Debug,
+    <R as State>::State: radio::RadioState,
+    <R as Receive>::Info: radio::ReceiveInfo + Default + Debug,
 {
     /// Create a new MAC base
-    pub fn new(radio: R) -> Result<Self, CoreError<E>> {
+    pub fn new(radio: R) -> Result<Self, CoreError<<R as Radio>::Error>> {
         let s = Self {
             radio,
             state: BaseState::Idle,
-            _radio_state: PhantomData,
-            _radio_err: PhantomData,
-            _radio_info: PhantomData,
         };
 
         Ok(s)
@@ -61,29 +58,37 @@ where
         }
     }
 
-    pub fn sleep(&mut self) -> Result<(), CoreError<E>> {
+    pub fn sleep(&mut self) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
         }
 
-        self.radio.set_state(S::sleep()).map_err(CoreError::Radio)?;
+        debug!("Entering sleep state");
+
+        self.radio
+            .set_state(<R as State>::State::sleep())
+            .map_err(CoreError::Radio)?;
         self.state = BaseState::Sleeping;
 
         Ok(())
     }
 
     /// Transmit a packet (immediately), this will fail if the radio is busy
-    pub fn transmit(&mut self, now: u64, data: &[u8]) -> Result<(), CoreError<E>> {
+    pub fn transmit(
+        &mut self,
+        now: u64,
+        data: &[u8],
+    ) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
         }
 
         debug!("Transmit {} bytes at {} ms", data.len(), now);
-        #[cfg(not(feature="defmt"))]
+        #[cfg(not(feature = "defmt"))]
         trace!("{:02x?}", data);
-        #[cfg(feature="defmt")]
+        #[cfg(feature = "defmt")]
         trace!("{:?}", data);
 
         // Start the transmission
@@ -96,7 +101,7 @@ where
     }
 
     /// Set the MAC radio up for packet receipt, this will fail if the radio is busy
-    pub fn receive(&mut self, now: u64) -> Result<(), CoreError<E>> {
+    pub fn receive(&mut self, now: u64) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
@@ -110,7 +115,7 @@ where
     }
 
     /// Fetch the channel RSSI
-    pub fn rssi(&mut self, _now: u64) -> Result<i16, CoreError<E>> {
+    pub fn rssi(&mut self, _now: u64) -> Result<i16, CoreError<<R as Radio>::Error>> {
         // Check we're not busy
         if self.is_busy() {
             return Err(CoreError::Busy);
@@ -123,52 +128,66 @@ where
     }
 
     /// Tick to update the MAC radio device
-    pub fn tick(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<E>> {
+    pub fn tick(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<<R as Radio>::Error>> {
         use BaseState::*;
+
+        trace!("BASE tick at {} ms, state: {}", now, self.state);
 
         match self.state {
             Idle => {
                 // TODO: Auto-start here or not?
-            },
+            }
             Listening | Receiving => {
                 // Check for received completion and return to caller
                 if let Some(rx) = self.check_receive(now)? {
                     return Ok(Some(rx));
                 }
                 // TODO: periodic check we're okay in the RX state?
-            },
+            }
             Transmitting => {
                 // Check for transmit completion
                 self.check_transmit(now)?;
-            },
+            }
             Sleeping => {
                 // TODO: pre-emptive wake here on sleep timeout?
-            },
+            }
         }
 
         Ok(None)
     }
 
     /// Internal function for receive state(s)
-    fn check_receive(&mut self, now: u64) -> Result<Option<RawPacket>, CoreError<E>> {
+    fn check_receive(
+        &mut self,
+        now: u64,
+    ) -> Result<Option<RawPacket>, CoreError<<R as Radio>::Error>> {
         // TODO: Check if we're currently receiving a packet and update state
 
         // Check for any received packets (and re-enter RX if required)
         if !self.radio.check_receive(true).map_err(CoreError::Radio)? {
-            return Ok(None)
+            return Ok(None);
         }
 
         let mut pkt = RawPacket::default();
-        let mut info = I::default();
 
         // Fetch received packet
-        pkt.len = self.radio.get_received(&mut info, &mut pkt.data).map_err(CoreError::Radio)?;
+        let (len, info) = self
+            .radio
+            .get_received(&mut pkt.data)
+            .map_err(CoreError::Radio)?;
+
+        pkt.len = len;
         pkt.rssi = info.rssi();
 
-        debug!("Received {} bytes with RSSI {} at {} ms", pkt.len, info.rssi(), now);
-        #[cfg(not(feature="defmt"))]
+        debug!(
+            "Received {} bytes with RSSI {} at {} ms",
+            pkt.len,
+            info.rssi(),
+            now
+        );
+        #[cfg(not(feature = "defmt"))]
         trace!("{:02x?}", pkt.data());
-        #[cfg(feature="defmt")]
+        #[cfg(feature = "defmt")]
         trace!("{:?}", pkt.data());
 
         // Restart RX
@@ -179,7 +198,7 @@ where
     }
 
     /// Internal function for transmit state(s)
-    fn check_transmit(&mut self, now: u64) -> Result<(), CoreError<E>> {
+    fn check_transmit(&mut self, now: u64) -> Result<(), CoreError<<R as Radio>::Error>> {
         // Check for tx completion
         if !self.radio.check_transmit().map_err(CoreError::Radio)? {
             return Ok(());
@@ -198,16 +217,13 @@ where
 #[cfg(test)]
 mod test {
     use super::*;
-    use radio::{BasicInfo, mock::*};
+    use radio::{mock::*, BasicInfo};
 
     #[test]
     fn init() {
-
         let mut radio = MockRadio::new(&[]);
 
-        radio.expect(&[
-            Transaction::start_receive(None),
-        ]);
+        radio.expect(&[Transaction::start_receive(None)]);
         let _base = Base::new(radio).unwrap();
     }
 
@@ -220,16 +236,12 @@ mod test {
         assert_eq!(base.state(), BaseState::Idle);
 
         // Start receive mode
-        radio.expect(&[
-            Transaction::start_receive(None),
-        ]);
+        radio.expect(&[Transaction::start_receive(None)]);
         base.receive(ts).unwrap();
         ts += 1;
 
         // No RX yet
-        radio.expect(&[
-            Transaction::check_receive(true, Ok(false)),
-        ]);
+        radio.expect(&[Transaction::check_receive(true, Ok(false))]);
         base.tick(ts).unwrap();
         assert_eq!(base.state(), BaseState::Listening);
         ts += 1;
@@ -258,16 +270,12 @@ mod test {
         assert_eq!(base.state(), BaseState::Idle);
 
         // Start receive mode
-        radio.expect(&[
-            Transaction::start_transmit(std::vec![00, 11, 22], None),
-        ]);
+        radio.expect(&[Transaction::start_transmit(std::vec![00, 11, 22], None)]);
         base.transmit(ts, &[00, 11, 22]).unwrap();
         ts += 1;
 
         // TX not yet complete
-        radio.expect(&[
-            Transaction::check_transmit(Ok(false)),
-        ]);
+        radio.expect(&[Transaction::check_transmit(Ok(false))]);
         base.tick(ts).unwrap();
         assert_eq!(base.state(), BaseState::Transmitting);
         ts += 1;
@@ -284,5 +292,4 @@ mod test {
 
         radio.done();
     }
-
 }

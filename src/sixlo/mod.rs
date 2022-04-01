@@ -5,41 +5,37 @@
 
 use core::marker::PhantomData;
 
+use crate::log::{debug, error, info, trace, FmtError};
 use crate::{Mac, Ts};
-use crate::log::{FmtError, debug, info, error};
 
-use ieee802154::mac::{Address as MacAddress, ShortAddress, ExtendedAddress};
+use ieee802154::mac::{Address as MacAddress, ExtendedAddress, ShortAddress};
 
 #[cfg(feature = "smoltcp")]
 pub mod smoltcp;
 
 pub mod headers;
-use headers::{Header, Eui64, V6Addr};
+use headers::{Eui64, Header, V6Addr};
 
 pub mod frag;
 use frag::*;
 
 use self::headers::MeshHeader;
 
-
 pub const IPV6_MTU: usize = 1280;
 
 pub const DEFAULT_FRAG_SIZE: usize = 64;
 
-
 /// 6LoWPAN Implementation, provides IP compatible interface to higher-layers.
-/// This includes IPv6 addressing, header compression, fragmentation, 
+/// This includes IPv6 addressing, header compression, fragmentation,
 /// and neighbour discovery and management
-pub struct SixLo<M, E, const MAX_PAYLOAD: usize> {
+pub struct SixLo<M, const MAX_PAYLOAD: usize> {
     cfg: SixLoConfig,
 
     mac: M,
     mac_addr: MacAddress,
-    _mac_err: PhantomData<E>,
 
     //eui64: Eui64,
     //v6_addr: V6Addr,
-
     frag: Frag<DEFAULT_FRAG_SIZE>,
 }
 
@@ -50,7 +46,7 @@ pub struct SixLoConfig {
 
 impl Default for SixLoConfig {
     fn default() -> Self {
-        Self{
+        Self {
             frag: Default::default(),
         }
     }
@@ -63,11 +59,10 @@ pub enum SixLoError<M> {
     NoTxFragSlots,
 }
 
-
-impl <M, E, const MAX_PAYLOAD: usize> SixLo<M, E, MAX_PAYLOAD> 
+impl<M, const MAX_PAYLOAD: usize> SixLo<M, MAX_PAYLOAD>
 where
-    M: Mac<Error=E>,
-    E: FmtError,
+    M: Mac,
+    <M as Mac>::Error: FmtError,
 {
     /// Create a new 6LowPAN stack instance
     pub fn new(mac: M, addr: MacAddress, cfg: SixLoConfig) -> Self {
@@ -77,7 +72,6 @@ where
             cfg,
 
             mac,
-            _mac_err: PhantomData,
             mac_addr: addr.clone(),
 
             // TODO: v6 + EUI addrs? PAN IDs?
@@ -91,11 +85,21 @@ where
     }
 
     /// Receive a 6LoWPAN packet, returning header and data on receipt
-    fn handle_rx(&mut self, now_ms: Ts, source: MacAddress, data: &[u8]) -> Result<(), SixLoError<E>> {
+    fn handle_rx(
+        &mut self,
+        now_ms: Ts,
+        source: MacAddress,
+        data: &[u8],
+    ) -> Result<(), SixLoError<<M as Mac>::Error>> {
         // Decode headers
         let (hdr, offset) = Header::decode(&data).unwrap();
 
-        debug!("Received {:?} from {:?}, {} bytes", hdr, source, data.len() - offset);
+        debug!(
+            "Received {:?} from {:?}, {} bytes",
+            hdr,
+            source,
+            data.len() - offset
+        );
 
         // Handle fragmentation
         // TODO: other layers before / after here?
@@ -109,18 +113,21 @@ where
     }
 }
 
-impl <M, E, const MAX_PAYLOAD: usize> SixLo<M, E, MAX_PAYLOAD> 
+impl<M, const MAX_PAYLOAD: usize> SixLo<M, MAX_PAYLOAD>
 where
-    M: Mac<Error=E>,
-    E: FmtError,
+    M: Mac,
+    <M as Mac>::Error: FmtError,
 {
     /// Tick to update the stack
-    pub fn tick(&mut self, now_ms: u64) -> Result<(), SixLoError<E>> {
+    pub fn tick(&mut self, now_ms: u64) -> Result<(), SixLoError<<M as Mac>::Error>> {
         let mut buff = [0u8; MAX_PAYLOAD];
+
+        trace!("MAC tick at {} ms", now_ms);
 
         // Tick internal MAC
         self.mac.tick().map_err(SixLoError::Mac)?;
-        let mac_busy = self.mac.busy().map_err(SixLoError::Mac)?;
+
+        let _mac_busy = self.mac.busy().map_err(SixLoError::Mac)?;
 
         // Check for (and handle) received packets from the MAC
         if let Some((n, info)) = self.mac.receive(&mut buff).map_err(SixLoError::Mac)? {
@@ -129,7 +136,7 @@ where
 
         // Poll fragmentation buffer for pending fragments
         let opts = PollOptions {
-            can_tx: !mac_busy,
+            can_tx: self.mac.can_transmit().map_err(SixLoError::Mac)?,
             ..Default::default()
         };
         if let Some((a, h, d)) = self.frag.poll(now_ms, opts) {
@@ -141,18 +148,27 @@ where
 
             // Encode header + data
             let mut n = h.encode(&mut buff);
-            &buff[n..n+d.len()].copy_from_slice(d);
+            buff[n..n + d.len()].copy_from_slice(d);
             n += d.len();
 
+            debug!("Transferring {} byte fragment to MAC", n);
+
             // Transmit fragment
-            self.mac.transmit(a, &buff[..n], ack).map_err(SixLoError::Mac)?;
+            self.mac
+                .transmit(a, &buff[..n], ack)
+                .map_err(SixLoError::Mac)?;
         }
 
         Ok(())
     }
 
     /// Transmit a datagram, fragmenting this as required
-    pub fn transmit(&mut self, now_ms: Ts, dest: MacAddress, data: &[u8]) -> Result<(), SixLoError<E>> {
+    pub fn transmit(
+        &mut self,
+        now_ms: Ts,
+        dest: MacAddress,
+        data: &[u8],
+    ) -> Result<(), SixLoError<<M as Mac>::Error>> {
         let mut buff = [0u8; MAX_PAYLOAD];
 
         // Write IPv6 headers
@@ -162,7 +178,7 @@ where
         #[cfg(nope)]
         {
             // Disabled while sorting out which headers are right / useful / required
-            header.mesh = Some(MeshHeader{
+            header.mesh = Some(MeshHeader {
                 final_addr: dest,
                 origin_addr: self.mac_addr,
                 hops_left: 7,
@@ -182,13 +198,15 @@ where
         // If we don't need to fragment, send directly
         if n + data.len() < buff.len() {
             // Copy data into TX buffer
-            &buff[n..n+data.len()].copy_from_slice(data);
+            buff[n..n + data.len()].copy_from_slice(data);
             n += data.len();
 
             debug!("Immediate TX {} byte datagram", data.len());
 
             // Transmit directly
-            self.mac.transmit(dest, &buff[..n], ack).map_err(SixLoError::Mac)?;
+            self.mac
+                .transmit(dest, &buff[..n], ack)
+                .map_err(SixLoError::Mac)?;
 
         // Otherwise, add the datagram to the fragmentation buffer
         } else {
@@ -204,9 +222,13 @@ where
     }
 
     /// Receive a datagram, reassembled internally
-    pub fn receive(&mut self, now_ms: Ts, buff: &mut [u8]) -> Result<Option<(usize, MacAddress, Header)>, SixLoError<E>> {
+    pub fn receive(
+        &mut self,
+        now_ms: Ts,
+        buff: &mut [u8],
+    ) -> Result<Option<(usize, MacAddress, Header)>, SixLoError<<M as Mac>::Error>> {
         if let Some((a, h, d)) = self.frag.pop() {
-            &mut buff[..d.len()].copy_from_slice(d);
+            buff[..d.len()].copy_from_slice(d);
 
             Ok(Some((d.len(), a.clone(), h.clone())))
         } else {
@@ -215,18 +237,10 @@ where
     }
 }
 
-
-
 #[cfg(test)]
 mod test {
     use super::*;
 
     #[test]
-    fn test_frag_defrag() {
-
-
-
-    }
-
+    fn test_frag_defrag() {}
 }
-

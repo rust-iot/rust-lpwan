@@ -7,22 +7,21 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 
-use log::{debug, info, error};
+use log::{debug, error, info};
 
 use structopt::StructOpt;
 
-use embedded_hal::blocking::delay::DelayMs;
-use driver_pal::hal::{HalInst, HalDelay, DeviceConfig};
+use driver_pal::hal::{DeviceConfig, HalInst};
+use embedded_hal::delay::blocking::DelayUs;
+use linux_embedded_hal::Delay;
 
 use radio_sx128x::prelude::*;
-use radio_sx128x::{Config as Sx128xConfig};
+use radio_sx128x::Config as Sx128xConfig;
 
 use lpwan::prelude::*;
 
-
 #[derive(Debug, StructOpt)]
 struct Options {
-
     #[structopt(flatten)]
     pub spi_config: DeviceConfig,
 
@@ -30,7 +29,7 @@ struct Options {
     /// Run as a PAN coordinator
     pub coordinator: bool,
 
-    #[structopt(long, default_value="100")]
+    #[structopt(long, default_value = "100")]
     /// Set PAN ID
     pub pan_id: u16,
 
@@ -47,7 +46,7 @@ pub struct SystemTimer {
 impl SystemTimer {
     fn new() -> Self {
         Self {
-            start: Instant::now()
+            start: Instant::now(),
         }
     }
 }
@@ -62,7 +61,6 @@ impl MacTimer for SystemTimer {
     }
 }
 
-
 fn main() -> anyhow::Result<()> {
     let running = Arc::new(AtomicBool::new(true));
     let r = running.clone();
@@ -70,7 +68,8 @@ fn main() -> anyhow::Result<()> {
     // Bind exit handler
     ctrlc::set_handler(move || {
         r.store(false, Ordering::SeqCst);
-    }).expect("Error setting Ctrl-C handler");
+    })
+    .expect("Error setting Ctrl-C handler");
 
     // Load options
     let opts = Options::from_args();
@@ -85,7 +84,7 @@ fn main() -> anyhow::Result<()> {
     info!("Starting lpwan-sx128x");
 
     debug!("Connecting to HAL");
-    let HalInst{base: _, spi, pins} = match HalInst::load(&opts.spi_config) {
+    let HalInst { base: _, spi, pins } = match HalInst::load(&opts.spi_config) {
         Ok(v) => v,
         Err(e) => {
             return Err(anyhow::anyhow!("HAL error: {:?}", e));
@@ -99,7 +98,15 @@ fn main() -> anyhow::Result<()> {
         gfsk.crc_mode = radio_sx128x::device::common::GfskFlrcCrcModes::RADIO_CRC_2_BYTES;
     }
 
-    let mut radio = match Sx128x::spi(spi, pins.cs, pins.busy, pins.ready, pins.reset, HalDelay{}, &rf_config) {
+    let mut radio = match Sx128x::spi(
+        spi,
+        pins.cs,
+        pins.busy,
+        pins.ready,
+        pins.reset,
+        Delay {},
+        &rf_config,
+    ) {
         Ok(v) => v,
         Err(e) => {
             return Err(anyhow::anyhow!("Radio init error: {:?}", e));
@@ -107,7 +114,9 @@ fn main() -> anyhow::Result<()> {
     };
 
     if let Modem::Gfsk(_gfsk) = &mut rf_config.modem {
-        radio.set_syncword(1, &[0x11, 0x22, 0x33, 0x44, 0x55]).unwrap();
+        radio
+            .set_syncword(1, &[0x11, 0x22, 0x33, 0x44, 0x55])
+            .unwrap();
     }
 
     // Initialise network stack
@@ -127,14 +136,13 @@ fn main() -> anyhow::Result<()> {
         }
     };
 
-
     debug!("Starting loop");
 
     let mut last_tx = timer.ticks_ms();
 
     while running.load(Ordering::SeqCst) {
         let now = timer.ticks_ms();
-        
+
         // Update the mac
         match mac.tick() {
             Ok(_) => (),
@@ -148,10 +156,10 @@ fn main() -> anyhow::Result<()> {
         match mac.receive(&mut buff) {
             Ok(Some((n, _i))) => {
                 info!("Received data: {:02x?}", &buff[..n]);
-            },
+            }
             Err(e) => {
                 error!("MAC RX error: {:?}", e)
-            },
+            }
             _ => (),
         }
 
@@ -171,7 +179,7 @@ fn main() -> anyhow::Result<()> {
         // TODO: rx / tx packets
 
         // TODO: wait a wee while for the next tick
-        HalDelay{}.try_delay_ms(1).unwrap();
+        Delay {}.delay_ms(1).unwrap();
     }
 
     Ok(())

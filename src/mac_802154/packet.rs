@@ -6,36 +6,37 @@
 use ieee802154::mac::*;
 use ieee802154::mac::{beacon::Beacon, command::Command};
 
-use heapless::{Vec, consts::U256};
+use heapless::Vec;
 
 // TODO: fix or remove this?
 pub const MAX_PAYLOAD_LEN: usize = 256;
 
 /// Packet object represents an IEEE 802.15.4 object with owned storage.
-/// 
+///
 /// Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html
 /// altered for static / owned storage via heapless
 #[derive(Clone, Debug)]
 // TODO: disabled on heapless::Vec support in defmt
 // See: https://github.com/japaric/heapless/issues/171
 //#[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct Packet {
+
+pub struct Packet<const N: usize = 256> {
     pub header: Header,
 
     pub content: FrameContent,
 
     // TODO: replace with const generic version when available in heapless
-    payload: Vec<u8, U256>,
+    payload: Vec<u8, N>,
 
     pub footer: [u8; 2],
 }
 
 impl PartialEq for Packet {
     fn eq(&self, o: &Self) -> bool {
-        self.header == o.header &&
-        self.content == o.content && 
-        self.payload() == o.payload() &&
-        self.footer == o.footer
+        self.header == o.header
+            && self.content == o.content
+            && self.payload() == o.payload()
+            && self.footer == o.footer
     }
 }
 
@@ -84,7 +85,7 @@ impl Packet {
 
     pub fn data(dest: Address, source: Address, seq: u8, data: &[u8], ack: bool) -> Packet {
         let payload = Vec::from_slice(data).unwrap();
-        
+
         Packet {
             header: Header {
                 frame_type: FrameType::Data,
@@ -139,16 +140,16 @@ impl Packet {
             _ => (),
         }
 
-        return PanId(0xFFFE)
+        return PanId(0xFFFE);
     }
 
     // Check whether this packet is an ack for the provided packet
     pub fn is_ack_for(&self, original: &Packet) -> bool {
-        self.header.frame_type == FrameType::Acknowledgement &&
-        self.header.source == original.header.destination &&
-        self.header.destination == original.header.source && 
-        self.header.seq == original.header.seq && 
-        self.content == FrameContent::Acknowledgement
+        self.header.frame_type == FrameType::Acknowledgement
+            && self.header.source == original.header.destination
+            && self.header.destination == original.header.source
+            && self.header.seq == original.header.seq
+            && self.content == FrameContent::Acknowledgement
     }
 
     // Based on https://docs.rs/ieee802154/0.3.0/ieee802154/mac/frame/struct.Frame.html#method.encode
@@ -162,7 +163,7 @@ impl Packet {
         len += self.content.encode(&mut buf[len..]);
 
         // Write payload
-        buf[len .. len+self.payload.len()].copy_from_slice(&self.payload);
+        buf[len..len + self.payload.len()].copy_from_slice(&self.payload);
 
         len += self.payload.len();
 
@@ -195,7 +196,7 @@ impl Packet {
         }
 
         // Fetch the body subslice
-        let body = &buf[header_len..header_len+remaining];
+        let body = &buf[header_len..header_len + remaining];
 
         // Decode the FrameContent
         let (content, used) = FrameContent::decode(body, &header)?;

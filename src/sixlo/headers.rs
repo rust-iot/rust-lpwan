@@ -7,7 +7,6 @@ use byteorder::{ByteOrder, LittleEndian};
 
 use ieee802154::mac::{Address, DecodeError, ExtendedAddress, PanId, ShortAddress};
 
-
 // https://tools.ietf.org/html/rfc4944#page-3
 
 #[derive(Clone, PartialEq, Debug)]
@@ -69,7 +68,7 @@ impl Header {
         } else {
             None
         };
-        
+
         // TODO: deocde BC0 broadcast header
         let bcast = None;
 
@@ -97,10 +96,18 @@ impl Header {
 
         // TODO: parse out IPv6 uncompressed header
 
-        Ok(( Self{ hc1, mesh, bcast, frag }, offset ))
+        Ok((
+            Self {
+                hc1,
+                mesh,
+                bcast,
+                frag,
+            },
+            offset,
+        ))
     }
 
-    pub fn encode(&self, buff: &mut[u8]) -> usize {
+    pub fn encode(&self, buff: &mut [u8]) -> usize {
         let mut offset = 0;
 
         if let Some(mesh) = &self.mesh {
@@ -149,7 +156,7 @@ pub enum DispatchBits {
     /// Uncompressed IPv6 header
     Ipv6 = 0b0100_0001,
     /// LOWPAN_HC1 compressed IPV6 header
-    Hc1 =  0b0100_0010,
+    Hc1 = 0b0100_0010,
     /// LOWPAN_BC0 broadcast
     Bc0 = 0b0101_0000,
     /// ESC(ape), additional dispatch byte follows
@@ -159,7 +166,7 @@ pub enum DispatchBits {
     /// Fragmentation header (first, 0b1100_0xxx)
     Frag1 = 0b1100_0000,
     /// Fragmentation header (N, 0b1110_0xxx)
-    FragN = 0b1110_0000
+    FragN = 0b1110_0000,
 }
 
 /// IPHC Header
@@ -171,7 +178,7 @@ pub struct IphcHeader {
     pub flags_1: IphcFlags1,
 }
 
-bitflags::bitflags!{
+bitflags::bitflags! {
     /// IPHC flags byte 1
     /// https://tools.ietf.org/html/draft-ietf-6lowpan-hc-15#section-3.1.1
     #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -201,7 +208,7 @@ bitflags::bitflags!{
     }
 }
 
-bitflags::bitflags!{
+bitflags::bitflags! {
     /// IPHC flags byte 2
     /// https://tools.ietf.org/html/draft-ietf-6lowpan-hc-15#section-3.1.1
     #[cfg_attr(feature = "defmt", derive(defmt::Format))]
@@ -260,7 +267,7 @@ impl IphcHeader {
         unimplemented!()
     }
 
-    pub fn encode(&self, buff: &mut[u8]) -> usize {
+    pub fn encode(&self, buff: &mut [u8]) -> usize {
         unimplemented!()
     }
 }
@@ -274,8 +281,7 @@ pub struct Hc1Header {
     pub hop_limit: u8,
 }
 
-
-bitflags::bitflags!{
+bitflags::bitflags! {
     #[cfg_attr(feature = "defmt", derive(defmt::Format))]
     pub struct Hc1Flags: u8 {
         const SRC_IF_COMPRESS  = 0b0000_0001;
@@ -288,11 +294,10 @@ bitflags::bitflags!{
         const NEXT_HDR_TCP     = 0b0110_0000;
         const HC2_EN           = 0b1000_0000;
 
-        const COMPRESS_ALL = Self::SRC_IF_COMPRESS.bits | Self::SRC_PFX_COMPRESS.bits 
+        const COMPRESS_ALL = Self::SRC_IF_COMPRESS.bits | Self::SRC_PFX_COMPRESS.bits
             | Self::DST_IF_COMPRESS.bits | Self::DST_PFX_COMPRESS.bits | Self::TC_COMPRESS.bits;
     }
 }
-
 
 impl Hc1Header {
     pub fn decode(buff: &[u8]) -> Result<(Self, usize), DecodeError> {
@@ -301,13 +306,10 @@ impl Hc1Header {
         let flags = Hc1Flags::from_bits_truncate(buff[1]);
         let hop_limit = buff[2];
 
-        Ok((
-            Self{ flags, hop_limit },
-            3
-        ))
+        Ok((Self { flags, hop_limit }, 3))
     }
 
-    pub fn encode(&self, buff: &mut[u8]) -> usize {
+    pub fn encode(&self, buff: &mut [u8]) -> usize {
         // Set header and dispatch for mesh HC1
         buff[0] = HeaderType::Mesh as u8;
         buff[0] |= DispatchBits::Hc1 as u8;
@@ -320,7 +322,6 @@ impl Hc1Header {
         buff[2] = self.hop_limit;
 
         // TODO: encode other header components
-
 
         return 3;
     }
@@ -374,7 +375,7 @@ impl MeshHeader {
             Address::Extended(PanId(0), l)
         };
 
-        let h = MeshHeader{
+        let h = MeshHeader {
             hops_left,
             origin_addr,
             final_addr,
@@ -383,9 +384,9 @@ impl MeshHeader {
         Ok((h, offset))
     }
 
-    pub fn encode(&self, buff: &mut[u8]) -> usize {
+    pub fn encode(&self, buff: &mut [u8]) -> usize {
         let mut offset = 0;
-        
+
         // Write header type
         buff[0] = HeaderType::Mesh as u8;
 
@@ -399,10 +400,8 @@ impl MeshHeader {
             Address::Short(_p, s) => {
                 buff[0] |= HEADER_MESH_SHORT_V;
                 s.encode(&mut buff[offset..])
-            },
-            Address::Extended(_p, e) => {
-                e.encode(&mut buff[offset..])
-            },
+            }
+            Address::Extended(_p, e) => e.encode(&mut buff[offset..]),
             Address::None => unreachable!(),
         };
 
@@ -411,10 +410,8 @@ impl MeshHeader {
             Address::Short(_p, s) => {
                 buff[0] |= HEADER_MESH_SHORT_V;
                 s.encode(&mut buff[offset..])
-            },
-            Address::Extended(_p, e) => {
-                e.encode(&mut buff[offset..])
-            },
+            }
+            Address::Extended(_p, e) => e.encode(&mut buff[offset..]),
             Address::None => unreachable!(),
         };
 
@@ -425,9 +422,7 @@ impl MeshHeader {
 
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
-pub struct BroadcastHeader {
-    
-}
+pub struct BroadcastHeader {}
 
 /// Fragmentation header per [rfc4944 Section 5.3](https://tools.ietf.org/html/rfc4944#section-5.3)
 #[derive(Clone, PartialEq, Debug)]
@@ -461,7 +456,7 @@ impl FragHeader {
         }
 
         // Read datagram size
-        let datagram_size = (buff[0] & 0b1110_0000) as u16 >> 5  | (buff[1] as u16) << 3;
+        let datagram_size = (buff[0] & 0b1110_0000) as u16 >> 5 | (buff[1] as u16) << 3;
         offset += 2;
 
         // Read datagram tag
@@ -476,7 +471,7 @@ impl FragHeader {
             None
         };
 
-        let h = FragHeader{
+        let h = FragHeader {
             datagram_size,
             datagram_tag,
             datagram_offset,
@@ -485,9 +480,9 @@ impl FragHeader {
         Ok((h, offset))
     }
 
-    pub fn encode(&self, buff: &mut[u8]) -> usize {
+    pub fn encode(&self, buff: &mut [u8]) -> usize {
         let mut offset = 0;
-        
+
         // Write header type
         buff[0] = HeaderType::Frag as u8;
         // Write datagram size
@@ -514,8 +509,6 @@ impl FragHeader {
     }
 }
 
-
-
 #[derive(Clone, PartialEq, Debug)]
 #[cfg_attr(feature = "defmt", derive(defmt::Format))]
 pub struct V6Addr(pub [u8; 16]);
@@ -534,34 +527,33 @@ impl From<Eui64> for V6Addr {
     }
 }
 
-
 #[cfg(any(feature = "alloc", feature = "std"))]
 impl core::fmt::Display for V6Addr {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let mut compress = false;
 
         for i in 0..8 {
-            let o = u16::from_be_bytes([self.0[i], self.0[i+1]]);
+            let o = u16::from_be_bytes([self.0[i], self.0[i + 1]]);
 
             match (o, compress) {
                 (0, false) if i < 7 => {
                     compress = true;
                     write!(f, ":")?;
-                },
+                }
                 (0, true) => (),
                 (_, true) => {
                     compress = false;
                     write!(f, ":{:04x}", o)?;
-                },
+                }
                 (_, false) if i == 0 => {
                     write!(f, "{:04x}", o)?;
-                },
+                }
                 (_, false) => {
                     write!(f, ":{:04x}", o)?;
                 }
             }
         }
-        
+
         Ok(())
     }
 }
@@ -578,19 +570,18 @@ impl From<(PanId, ShortAddress)> for Eui64 {
         let pan_id = a.0;
         let short_addr = a.1;
 
-        Eui64(
-            u64::from_le_bytes([
-                0, 0,
-                pan_id.0 as u8,
-                (pan_id.0 >> 8) as u8,
-                0, 0,
-                short_addr.0 as u8,
-                (short_addr.0 >> 8) as u8,
-            ])
-        )
+        Eui64(u64::from_le_bytes([
+            0,
+            0,
+            pan_id.0 as u8,
+            (pan_id.0 >> 8) as u8,
+            0,
+            0,
+            short_addr.0 as u8,
+            (short_addr.0 >> 8) as u8,
+        ]))
     }
 }
-
 
 impl From<ExtendedAddress> for Eui64 {
     /// Create a new EUI-64 Interface Identifier from an 802.15.4 Extended address
@@ -602,39 +593,36 @@ impl From<ExtendedAddress> for Eui64 {
                 extended.0 as u8,
                 (extended.0 >> 8) as u8,
                 (extended.0 >> 16) as u8,
-                0xFF, 0xFE,
+                0xFF,
+                0xFE,
                 (extended.0 >> 24) as u8,
                 (extended.0 >> 32) as u8,
                 (extended.0 >> 48) as u8,
-            ])
+            ]),
         )
     }
 }
-
 
 impl From<[u8; 6]> for Eui64 {
     /// Create a new EUI-64 Interface Identifier from a MAC address
     /// Per [RFC2464 Section 4](https://tools.ietf.org/html/rfc2464
     fn from(mac: [u8; 6]) -> Self {
-        Eui64(
-            u64::from_le_bytes([
-                mac[0] ^ 0b10,  // Complement universal/local bit
-                mac[1],
-                mac[2],
-                0xFF, 0xFE,
-                mac[3],
-                mac[4],
-                mac[5],
-            ])
-        )
+        Eui64(u64::from_le_bytes([
+            mac[0] ^ 0b10, // Complement universal/local bit
+            mac[1],
+            mac[2],
+            0xFF,
+            0xFE,
+            mac[3],
+            mac[4],
+            mac[5],
+        ]))
     }
 }
-
 
 // TODO: [unicast address mapping](https://tools.ietf.org/html/rfc4944#section-8)
 
 // TODO: [multicast address mapping](https://tools.ietf.org/html/rfc4944#section-9)
-
 
 // TODO: [header compression](https://tools.ietf.org/html/rfc4944#section-10)
 
@@ -650,7 +638,7 @@ mod test {
     fn frag_header() {
         let mut buff = [0u8; 128];
 
-        let fh = FragHeader{
+        let fh = FragHeader {
             datagram_tag: 14,
             datagram_size: 100,
             datagram_offset: Some(8),

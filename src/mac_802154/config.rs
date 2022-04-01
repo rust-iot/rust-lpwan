@@ -3,12 +3,8 @@
 // https://github.com/rust-iot/rust-lpwan
 // Copyright 2021 Ryan Kurte
 
-use ieee802154::mac::{PanId};
-use ieee802154::mac::beacon::{
-    BeaconOrder,
-    SuperframeOrder,
-    SuperframeSpecification,
-};
+use ieee802154::mac::beacon::{BeaconOrder, SuperframeOrder, SuperframeSpecification};
+use ieee802154::mac::PanId;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Config {
@@ -19,8 +15,8 @@ pub struct Config {
     pub base_superframe_duration: u32,
 
     /// Mac beacon order, sets superframe length
-    /// 
-    /// beacon period = base_superframe_duration * 2^mac_beacon_order, 
+    ///
+    /// beacon period = base_superframe_duration * 2^mac_beacon_order,
     /// thus a value of 0 sets the superframe length to base_superframe_duration
     /// Valid values are 0 < v < 15, a value of 15 disables sending beacon frames
     pub mac_beacon_order: BeaconOrder,
@@ -78,7 +74,7 @@ impl Default for Config {
             mac_deadline: 10,
 
             max_beacon_misses: 10,
-            assoc_timeout: 10*1000,
+            assoc_timeout: 10 * 1000,
             battery_life_extension: true,
 
             max_retries: 5,
@@ -97,7 +93,7 @@ impl Config {
         match self.mac_beacon_order {
             BeaconOrder::BeaconOrder(o) => {
                 (self.base_superframe_duration * 2_u32.pow(o as u32)) as u32
-            },
+            }
             _ => 0,
         }
     }
