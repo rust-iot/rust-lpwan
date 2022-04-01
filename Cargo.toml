@@ -42,7 +42,7 @@ byte = "0.2.4"
 strum = { version = "0.24.0", default_features = false, features = [ "derive" ] }
 
 [dependencies.smoltcp]
-version = "0.7.1"
+version = "0.8.0"
 features = [ "proto-ipv6" ]
 default-features = false
 optional = true
