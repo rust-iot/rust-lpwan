@@ -22,6 +22,10 @@ defmt-info = []
 defmt-warn = []
 defmt-error = []
 
+# Enable defmt logging (requires ieee802154 feature)
+log-defmt = [ "defmt", "ieee802154/defmt" ]
+
+# Default features
 default = [ "std", "smoltcp" ]
 
 [dependencies]
