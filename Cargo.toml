@@ -56,7 +56,7 @@ structopt = "0.3.21"
 radio-sx128x = "0.18.0"
 embedded-hal = "1.0.0-alpha.7"
 driver-pal = "0.8.0-alpha.2"
-ctrlc = "3.1.8"
+ctrlc = "3.2.2"
 humantime = "2.1.0"
 rand = "0.8.3"
 
