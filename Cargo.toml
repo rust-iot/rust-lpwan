@@ -29,7 +29,7 @@ log-defmt = [ "defmt", "ieee802154/defmt" ]
 default = [ "std", "smoltcp" ]
 
 [dependencies]
-radio = "0.11.0"
+radio = "0.11.1"
 ieee802154 = { version = "0.3.0" }
 log = "0.4.8"
 heapless = "0.7.10"
@@ -48,7 +48,7 @@ default-features = false
 optional = true
 
 [dev-dependencies]
-radio = { version = "0.11.0", features = ["mock"] }
+radio = { version = "0.11.1", features = ["mock"] }
 linux-embedded-hal = "0.4.0-alpha.2"
 simplelog = "0.8.0"
 anyhow = "1.0.40"
