@@ -221,9 +221,9 @@ dependencies = [
 
 [[package]]
 name = "defmt"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9252abe43d4c0a5df0c5c865129fa8daad338bb33357ba40023a37cd34b4a7b9"
+checksum = "d3a0ae7494d9bff013d7b89471f4c424356a71e9752e0c78abe7e6c608a16bb3"
 dependencies = [
  "bitflags",
  "defmt-macros",
@@ -571,7 +571,7 @@ dependencies = [
  "radio-sx128x",
  "rand",
  "rand_core",
- "simplelog 0.8.0",
+ "simplelog 0.9.0",
  "smoltcp",
  "structopt",
  "strum",
@@ -758,9 +758,9 @@ dependencies = [
 
 [[package]]
 name = "radio"
-version = "0.11.0"
+version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1337ea1f0afdfd180e4ef937a6ddea19602813b608fb4cb183768e555c402b9d"
+checksum = "9b5db8d0fe5e071842a0c435e65c7eb13fbf2c44bd90a3da722f2bf2bcbb2df7"
 dependencies = [
  "byteorder",
  "chrono",
