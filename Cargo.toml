@@ -51,7 +51,7 @@ optional = true
 radio = { version = "0.11.1", features = ["mock"] }
 linux-embedded-hal = "0.4.0-alpha.2"
 simplelog = "0.9.0"
-anyhow = "1.0.40"
+anyhow = "1.0.69"
 structopt = "0.3.21"
 radio-sx128x = "0.18.0"
 embedded-hal = "1.0.0-alpha.7"
