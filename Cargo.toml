@@ -29,7 +29,7 @@ log-defmt = [ "defmt", "ieee802154/defmt" ]
 default = [ "std", "smoltcp" ]
 
 [dependencies]
-radio = "0.11.1"
+radio = "0.12.0"
 ieee802154 = { version = "0.3.0" }
 log = "0.4.17"
 heapless = "0.7.10"
@@ -39,7 +39,7 @@ byteorder = { version = "1.4.3", default-features = false }
 defmt = { version = "0.3.2", optional = true }
 bitflags = "1.2.1"
 byte = "0.2.4"
-strum = { version = "0.24.0", default_features = false, features = [ "derive" ] }
+strum = { version = "0.26.2", default_features = false, features = [ "derive" ] }
 
 [dependencies.smoltcp]
 version = "0.7.1"
@@ -48,7 +48,7 @@ default-features = false
 optional = true
 
 [dev-dependencies]
-radio = { version = "0.11.1", features = ["mock"] }
+radio = { version = "0.12.0", features = ["mock"] }
 linux-embedded-hal = "0.4.0-alpha.2"
 simplelog = "0.9.0"
 anyhow = "1.0.40"

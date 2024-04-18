@@ -128,6 +128,7 @@ pub struct Mac<R, T, const N: usize = 4> {
 
     seq: u8,
     sync_offset: u64,
+    sync_correction: i64,
     last_asn: u64,
 
     next_beacon: u64,
@@ -169,6 +170,7 @@ where
 
             seq: 0,
             sync_offset: 0,
+            sync_correction: 0,
             last_asn: 0,
             next_beacon: 0,
             beacon_miss_count: 0,
@@ -712,6 +714,7 @@ where
                     self.sync_state = SyncState::Synced(p.header.source);
                     // TODO: in TSCH impls sync offset set based on ASN
                     self.sync_offset = now;
+                    self.sync_correction = 0;
 
                     self.next_beacon = now + self.config.superframe_duration() as u64;
                     self.beacon_miss_count = 0;
@@ -734,32 +737,34 @@ where
                         // This is improved by TSCH EBs / ASNs huh?
                         // TODO: what happens if we're > one slot out of sync
 
-                        // Compute the difference between our expectation and the actual rx time
+                        // Compute the error in frame sync
                         let delta = (now as i64 - self.next_beacon as i64) as i64
                             % self.config.superframe_duration() as i64;
 
+                        // Compute the difference between our expectation and the actual rx time
+                        // normalised within the frame time.
                         let shift = calculate_offset(
-                            self.sync_offset as i64,
                             now as i64,
                             self.next_beacon as i64,
                             self.config.superframe_duration() as i64,
                         );
 
-                        // Update stack synchronization offset
-                        // TODO: replace this with a rolling average, split ASN and offset concepts
-                        // so these can each be smaller numbers
-                        self.sync_offset = (self.sync_offset as i64 + shift / 2) as u64;
+                        // TODO: update sync offset to match ASN (when beacons include this)
+                        // (or, split sync offset and ASN concepts)
+
+                        // Update beacon sync correction offset (eg. clock / timing compensation)
+                        self.sync_correction = self.sync_correction + shift / 2;
 
                         debug!(
-                            "Received new beacon at {} ms (error: {} ms, applied shift of {} ms)",
+                            "Received new beacon at {} ms (error: {} ms, new correction of {} ms)",
                             now,
                             delta,
-                            shift / 2
+                            self.sync_correction
                         );
 
                         // Set new beacon expected time
                         // TODO: really this should happen in tick rather than here?
-                        self.next_beacon = now + self.config.superframe_duration() as u64;
+                        self.next_beacon = (now as i64 + self.config.superframe_duration() as i64 + self.sync_correction) as u64;
                         self.beacon_miss_count = 0;
                         debug!("Arm next beacon RX at {} ms", self.next_beacon);
                     }
@@ -868,7 +873,7 @@ where
     }
 }
 
-fn calculate_offset(offset: i64, now: i64, expected: i64, frame: i64) -> i64 {
+fn calculate_offset(now: i64, expected: i64, frame: i64) -> i64 {
     // Compute the difference between our expectation and the actual rx time
     let mut delta = (now - expected) % frame;
 
